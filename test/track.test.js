@@ -11,7 +11,7 @@ const ctx = H.makeContext();
 H.run(ctx, H.grab(core, ['clamp', 'lerp', 'sign', 'dist2', 'angDiff', 'hash01']));
 H.run(ctx, 'var SPACING = 4;');
 H.run(ctx, H.grabVar(track, ['TRACKS']));
-H.run(ctx, H.grab(track, ['catmull', 'resample', 'buildTrack', 'nearest', 'finishNearest']));
+H.run(ctx, H.grab(track, ['catmull', 'resample', 'stripPoints', 'buildTrack', 'nearest', 'finishNearest']));
 
 console.log('\nTRACK');
 

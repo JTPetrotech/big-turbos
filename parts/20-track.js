@@ -33,8 +33,58 @@ var TRACKS = {
     width: 14, laps: 2, grass: 0x18241d,
     pts: [[0,-210],[120,-190],[210,-110],[230,10],[190,120],[90,190],[-30,215],
           [-150,185],[-225,95],[-240,-30],[-190,-140],[-90,-200]]
+  },
+
+  /* A quarter mile and a bit, dead straight. `shape: 'strip'` means the
+     points are laid out by hand rather than run through the spline - a
+     Catmull-Rom curve through collinear points is very nearly straight, and
+     very nearly is not good enough when the whole event is whether you held
+     a lane for 402 metres. */
+  strip: {
+    name: 'Mill Road Strip',
+    desc: 'A quarter mile, a pair of lanes and a set of lights. Nothing to steer around.',
+    width: 20, laps: 1, grass: 0x1a1d22,
+    shape: 'strip', length: 530, turn: 46
+  },
+
+  /* Nothing to win. `open: true` takes the barrier away, so the road is a
+     suggestion and the field around it is the point. */
+  roam: {
+    name: 'Mill Road',
+    desc: 'No clock, no grid, no laps. Drive wherever you like, including off it.',
+    width: 16, laps: 0, grass: 0x1b2a18, open: true,
+    pts: [[0,-260],[170,-230],[290,-130],[320,20],[250,170],[110,250],[-40,280],
+          [-190,240],[-300,130],[-330,-30],[-260,-180],[-120,-260]]
   }
 };
+
+/* The drag strip, laid out rather than splined. Start line at (0,0) pointing
+   straight down +z, then a U-turn at each end so the loop still closes and
+   everything downstream - distance along, the minimap, the road ribbon - keeps
+   working without knowing this track is a special case. The return lane is
+   never driven: a quarter mile is well short of the first turn. */
+function stripPoints(def){
+  var out = [], i;
+  var L = def.length || 530, R = def.turn || 46, gap = R * 2;
+
+  /* Each section is divided into a whole number of steps so that it ends
+     exactly where the next one begins. Spacing has to stay even all the way
+     round: the AI looks a fixed number of points ahead. */
+  var ns = Math.max(4, Math.round(L / SPACING)), ds = L / ns;
+  var na = Math.max(8, Math.round(Math.PI * R / SPACING));
+
+  for(i = 0; i < ns; i++) out.push({ x: 0, z: i * ds });                 // the strip
+  for(i = 0; i < na; i++){                                               // far U-turn
+    var a = Math.PI * (i / na);
+    out.push({ x: R - R * Math.cos(a), z: L + R * Math.sin(a) });
+  }
+  for(i = 0; i < ns; i++) out.push({ x: gap, z: L - i * ds });           // return lane
+  for(i = 0; i < na; i++){                                               // near U-turn
+    var b = Math.PI * (i / na);
+    out.push({ x: R + R * Math.cos(b), z: -R * Math.sin(b) });
+  }
+  return out;
+}
 
 /* ------------------------------------------------------ spline resampling -- */
 
@@ -97,7 +147,7 @@ function buildTrack(key){
   var def = TRACKS[key];
   if(!def) throw new Error('no track called ' + key);
 
-  var pts = resample(def.pts, SPACING);
+  var pts = def.shape === 'strip' ? stripPoints(def) : resample(def.pts, SPACING);
   var n = pts.length;
 
   /* Direction and cumulative distance at every sample. */
@@ -130,6 +180,7 @@ function buildTrack(key){
   return {
     key: key, name: def.name, desc: def.desc,
     width: def.width, laps: def.laps, grass: def.grass,
+    open: !!def.open, shape: def.shape || 'loop',
     pts: pts, n: n, total: total
   };
 }

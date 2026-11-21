@@ -11,9 +11,10 @@ const ctx = H.makeContext({ MPS_TO_MPH: 2.23694 });
 H.run(ctx, H.grab(core, ['clamp', 'lerp', 'sign']));
 H.run(ctx, 'var SAVE = {parts:{}, looks:{}, owned:["hatch"], credits:0, done:{}};');
 H.run(ctx, 'function saveNow(){}');
-H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'PAINTS', 'WHEELS', 'STRIPES', 'EVENTS', 'CLASSES']));
+H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'PAINTS', 'WHEELS', 'STRIPES', 'EVENTS', 'CLASSES']));
 H.run(ctx, 'var GRAV = 9.81, RHO = 1.225, POWER_USE = 0.55, TRACTION = 0.85;');
 H.run(ctx, H.grab(gar, [
+  'isTruck', 'slotFits', 'slotsFor',
   'slotByKey', 'partsFor', 'tierOf', 'carStats', 'statsOf', 'rollingForce',
   'driveForce', 'tractionLimit', 'dragForce', 'dragLimited', 'topSpeed',
   'forceAt', 'zeroTo60', 'gripAt', 'rating', 'classOf', 'summary',
@@ -65,9 +66,11 @@ H.ok(gripAt(stock.rally.s, 30) > gripAt(stock.muscle.s, 30),
 
 console.log('\n  each part changes the car');
 for(const slot of ctx.SLOTS){
+  /* A lift kit is only sold for a truck, so it has to be tried on one. */
+  const on = slot.only === 'truck' ? 'trx' : 'coupe';
   for(let t = 1; t < slot.tiers.length; t++){
-    const before = carStats('coupe', {});
-    const after = carStats('coupe', { [slot.key]: t });
+    const before = carStats(on, {});
+    const after = carStats(on, { [slot.key]: t });
     let changed = false;
     for(const k of Object.keys(before)){
       if(Math.abs(before[k] - after[k]) > 1e-9) changed = true;

@@ -53,10 +53,74 @@ var CARS = {
     desc: 'Barely a road car. Stiff, loud, and utterly unforgiving of a lazy line.',
     price: 155000, mass: 980, power: 375, grip: 1.42, brake: 13.2, steer: 2.75, cda: 0.58,
     body: 'proto', colour: 0x2fd39a
+  },
+
+  /* ---------------------------------------------------------------------
+     The turbo cars the game is named after, and the big supercharged stuff
+     that answers them. Figures are the real ones for the cars these are
+     drawn from: kilowatts, kilograms, and a drag area that a two-and-a-half
+     tonne truck really does have. Nothing here is scaled to feel fair.
+
+     `boost` and `lag` on a car are its factory induction, before anything
+     in the garage. A sequential twin-turbo is on song almost off idle; a
+     single big one is not; a supercharger has no lag at all and so carries
+     none of this, just a lot of power.
+     --------------------------------------------------------------------- */
+
+  a80: {
+    name: 'Apex A80 Twin-Turbo', nick: 'The A80',
+    desc: 'Sequential turbos, so it pulls from almost nothing and never stops. Heavy, and it hides it well.',
+    price: 58000, mass: 1570, power: 239, grip: 1.14, brake: 10.6, steer: 2.25, cda: 0.70,
+    boost: 0.16, lag: 10,
+    body: 'a80', colour: 0xe8562c
+  },
+  a90: {
+    name: 'Apex A90', nick: 'The A90',
+    desc: 'Shorter, stiffer and sharper than the car it is named after. One big turbo and a very short wheelbase.',
+    price: 78000, mass: 1540, power: 285, grip: 1.18, brake: 11.0, steer: 2.40, cda: 0.63,
+    boost: 0.14, lag: 8,
+    body: 'a90', colour: 0xd8d8dc
+  },
+  hellcoupe: {
+    name: 'Hellion 6.2 Coupe', nick: 'The Hellion',
+    desc: 'Supercharged, so all of it arrives at once. Two tonnes of it. The tyres are a formality.',
+    price: 118000, mass: 1975, power: 527, grip: 1.04, brake: 10.2, steer: 1.90, cda: 0.86,
+    body: 'hellcoupe', colour: 0x6b2fd0
+  },
+  hellsedan: {
+    name: 'Hellion 6.2 Sedan', nick: 'The four-door',
+    desc: 'The same engine with two more doors and a longer wheelbase. Calmer, heavier, every bit as silly.',
+    price: 112000, mass: 2050, power: 527, grip: 1.02, brake: 10.0, steer: 1.85, cda: 0.90,
+    body: 'hellsedan', colour: 0x1d1f24
+  },
+  hellwagon: {
+    name: 'Hellion Wagon', nick: 'The fast SUV',
+    desc: 'Three rows of seats and seven hundred horsepower. Physics has opinions about the corners.',
+    price: 104000, mass: 2470, power: 529, grip: 0.95, brake: 9.8, steer: 1.75, cda: 1.08,
+    body: 'suv', colour: 0x2a6e4a
+  },
+  trx: {
+    name: 'Warhawk TRX', nick: 'The truck',
+    desc: 'Supercharged pickup on knobbly tyres. Hopeless in a corner, hilarious everywhere else, and it does not care about grass.',
+    price: 96000, mass: 2900, power: 523, grip: 0.88, brake: 9.2, steer: 1.60, cda: 1.95,
+    offroad: 0.35,
+    body: 'pickup', colour: 0xb8902c
   }
 };
 
-var CAR_ORDER = ['hatch', 'coupe', 'muscle', 'rally', 'proto'];
+/* Which bodies are trucks. A lift kit is only offered to these, and they are
+   the only things that come out of the factory with any off-road ability. */
+var TRUCK_BODIES = { suv: true, pickup: true };
+function isTruck(carKey){
+  var c = CARS[carKey];
+  return !!(c && TRUCK_BODIES[c.body]);
+}
+
+/* Showroom order, and the order the AI picks from. Sorted by rating, which
+   the tests enforce - a showroom that is not in order is a showroom that
+   lies about which car is the step up. */
+var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'muscle', 'rally',
+                 'hellwagon', 'a90', 'hellsedan', 'hellcoupe', 'proto'];
 
 /* ----------------------------------------------------------------- parts -- */
 /* Every tier lists what it does to the car in plain terms, because a player
@@ -127,6 +191,22 @@ var SLOTS = [
     ]
   },
   {
+    key: 'lift', name: 'Lift kit', blurb: 'Ride height, and everything it costs you.',
+    only: 'truck',
+    tiers: [
+      { name: 'Stock', cost: 0, d: 'However it left the dealer.' },
+      { name: '2in on A/Ts', cost: 6800, lift: 0.07, grip: 0.96, cda: 1.06,
+        stability: 0.97, offroad: 0.30,
+        d: 'All-terrains. A little vaguer on tarmac, a lot better off it.' },
+      { name: '4in on 35s', cost: 18500, lift: 0.14, grip: 0.91, cda: 1.14,
+        stability: 0.93, steer: 0.94, offroad: 0.55,
+        d: 'A proper lift. It leans, it drags, and it goes where nothing else here goes.' },
+      { name: '6in on 37s', cost: 37000, lift: 0.22, grip: 0.84, cda: 1.26,
+        stability: 0.87, steer: 0.88, offroad: 0.80,
+        d: 'Absurd. Slower everywhere there is tarmac, unstoppable where there is not.' }
+    ]
+  },
+  {
     key: 'weight', name: 'Weight', blurb: 'Quicker everywhere, and nervous with it.',
     tiers: [
       { name: 'Standard', cost: 0, mass: 0, stability: 1.00, d: 'Carpets, seats, sound deadening, the lot.' },
@@ -136,6 +216,20 @@ var SLOTS = [
     ]
   }
 ];
+
+/* A lift kit belongs on a truck and nowhere else. Rather than let the garage
+   offer it to a prototype and have carStats quietly ignore it, both sides ask
+   this, so what you are shown and what you get can never disagree. */
+function slotFits(slot, carKey){
+  if(slot.only === 'truck') return isTruck(carKey);
+  return true;
+}
+
+function slotsFor(carKey){
+  var out = [];
+  for(var i = 0; i < SLOTS.length; i++) if(slotFits(SLOTS[i], carKey)) out.push(SLOTS[i]);
+  return out;
+}
 
 function slotByKey(key){
   for(var i = 0; i < SLOTS.length; i++) if(SLOTS[i].key === key) return SLOTS[i];
@@ -175,15 +269,18 @@ function carStats(carKey, parts){
     steer: base.steer,
     cda: base.cda,
     down: 0,            // downforce coefficient, grip gained per (m/s)^2
-    boost: 0,           // extra power fraction once spooled
-    lag: 0,             // m/s below which the turbo does nothing
+    boost: base.boost || 0,   // extra power fraction once spooled, factory included
+    lag: base.lag || 0,       // m/s below which the turbo does nothing
     force: 1,           // gearing force multiplier
     top: 1,             // gearing top-speed multiplier
-    stability: 1        // how settled the back end is
+    stability: 1,       // how settled the back end is
+    offroad: base.offroad || 0,  // 0 = a road car on grass, 1 = barely notices
+    lift: 0             // ride height added, metres - visual and centre of gravity
   };
 
   for(var i = 0; i < SLOTS.length; i++){
     var slot = SLOTS[i];
+    if(!slotFits(slot, carKey)) continue;
     var tier = slot.tiers[clamp(parts[slot.key] || 0, 0, slot.tiers.length - 1)];
     if(!tier) continue;
     if(tier.power) s.power *= tier.power;
@@ -198,7 +295,10 @@ function carStats(carKey, parts){
     if(tier.force) s.force *= tier.force;
     if(tier.top) s.top *= tier.top;
     if(tier.stability) s.stability *= tier.stability;
+    if(tier.offroad) s.offroad += tier.offroad;
+    if(tier.lift) s.lift += tier.lift;
   }
+  s.offroad = clamp(s.offroad, 0, 1);
 
   /* A car cannot be lighter than its own cage and engine. Without this the
      weight tiers on the lightest car would walk it down towards nothing. */

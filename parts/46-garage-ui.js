@@ -116,10 +116,18 @@ function drawGarage(){
   }
   renderStats($('gStats'), carKey, parts, preview);
 
+  /* Switching from a truck to a car with the lift tab open would leave the
+     garage on a slot that car cannot have. */
+  if(!slotFits(slotByKey(garageSlot) || {}, carKey)) garageSlot = 'engine';
+
   /* tabs */
   var tabs = '';
   for(var i = 0; i < SLOTS.length; i++){
     var s = SLOTS[i];
+    /* The lift kit tab only exists on a truck. carStats ignores the slot for
+       anything else, so showing it here would be selling a part that does
+       nothing. */
+    if(!slotFits(s, carKey)) continue;
     var fitted = tierOf(carKey, s.key);
     tabs += '<button class="tab' + (s.key === garageSlot ? ' on' : '') +
             '" data-slot="' + s.key + '">' + s.name +

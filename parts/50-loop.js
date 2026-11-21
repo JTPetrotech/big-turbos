@@ -73,7 +73,7 @@ function refreshCarPreview(){
     showcase.remove(showcase.userData.car);
     disposeTree(showcase.userData.car);
   }
-  var car = buildCar(SAVE.car, looksFor(SAVE.car));
+  var car = buildCar(SAVE.car, looksFor(SAVE.car), statsOf(SAVE.car).lift);
   showcase.add(car);
   showcase.userData.car = car;
   updateMenu();
@@ -144,6 +144,7 @@ function buildField(ev){
 function startRace(opts){
   hideAll();
   G.event = opts.event || null;
+  G.kind = opts.kind || 'race';      // 'race', 'drag' or 'roam'
   G.laps = opts.laps;
   G.track = buildTrack(opts.track);
 
@@ -164,35 +165,56 @@ function startRace(opts){
     }));
   }
 
-  gridUp(G.cars, G.track);
+  if(G.kind === 'drag') stageDrag(G.cars, G.track);
+  else gridUp(G.cars, G.track);
 
   for(var c = 0; c < G.cars.length; c++){
     var car = G.cars[c];
     var looks = car.isYou ? looksFor(SAVE.car)
                           : { paint: (c * 5) % PAINTS.length, wheel: c % WHEELS.length,
                               stripe: 0, spoiler: c % 2 === 0 };
-    var obj = buildCar(car.key, looks);
+    var obj = buildCar(car.key, looks, car.stats.lift);
     car.obj = obj;
     scene.add(obj);
     carObjs.push(obj);
   }
 
   G.t = 0;
-  G.countdown = 3.6;
-  G.started = false;
+  /* Free roam has nothing to wait for. A drag race gets three ambers rather
+     than a rolling countdown, and a reaction time to go with them. */
+  G.countdown = G.kind === 'drag' ? 2.1 : 3.6;
+  G.started = G.kind === 'roam';
+  G.foul = false;
+  G.react = null;
   G.mode = 'race';
   G.finished = [];
   G.lastTime = 0;
+  G.lastCount = null;
 
   show('hud');
   placeCamera(true);
-  banner(TRACKS[opts.track].name, G.laps + ' laps');
+  if(G.kind === 'drag') banner(TRACKS[opts.track].name, 'a quarter mile');
+  else if(G.kind === 'roam') banner(TRACKS[opts.track].name, 'drive wherever you like');
+  else banner(TRACKS[opts.track].name, G.laps + ' laps');
+}
+
+/* ------------------------------------------------------- the other modes -- */
+
+function startDrag(){
+  startRace({ track: 'strip', laps: 1, kind: 'drag',
+              field: buildField({ field: 1, max: 9999 }) });
+}
+
+function startRoam(){
+  startRace({ track: 'roam', laps: 0, kind: 'roam', field: [] });
 }
 
 function restartRace(){
   if(!G.track) return;
+  if(G.kind === 'drag'){ startDrag(); return; }
+  if(G.kind === 'roam'){ startRoam(); return; }
   startRace({
-    track: G.track.key, laps: G.laps, event: G.event,
+    track: G.track.key, laps: G.laps, event: G.event, kind: G.kind,
     field: G.event ? buildField(G.event) : quickField()
   });
 }
@@ -206,15 +228,36 @@ function quickField(){
 function raceStep(dt){
   if(!G.started){
     G.countdown -= dt;
-    var n = Math.ceil(G.countdown - 0.6);
-    if(G.countdown > 0.6){
-      if(n !== G.lastCount){ G.lastCount = n; banner(String(n), ''); }
+    if(G.kind === 'drag'){
+      /* Three ambers, then green. Touching the throttle before the green is
+         a red light, exactly as it would be: the run still happens, but the
+         result card says what you did. */
+      if(INPUT.throttle > 0) G.foul = true;
+      var amb = Math.ceil(G.countdown / 0.7);
+      if(G.countdown > 0){
+        if(amb !== G.lastCount){
+          G.lastCount = amb;
+          var dots = '';
+          for(var a = 0; a < amb; a++) dots += '●';
+          banner('<span style="color:var(--amber)">' + dots + '</span>', 'stand by');
+        }
+      } else {
+        G.started = true;
+        banner('GREEN', '');
+      }
     } else {
-      G.started = true;
-      banner('GO', '');
+      var n = Math.ceil(G.countdown - 0.6);
+      if(G.countdown > 0.6){
+        if(n !== G.lastCount){ G.lastCount = n; banner(String(n), ''); }
+      } else {
+        G.started = true;
+        banner('GO', '');
+      }
     }
   } else {
     G.t += dt;
+    /* Reaction time: green to throttle, measured once. */
+    if(G.kind === 'drag' && G.react === null && INPUT.throttle > 0) G.react = G.t;
   }
 
   for(var i = 0; i < G.cars.length; i++){
@@ -229,7 +272,21 @@ function raceStep(dt){
     stepCar(car, G.track, input, dt);
     updateProgress(car, G.track, G.t);
 
-    if(car.lap > G.laps && !car.finished){
+    if(G.kind === 'drag'){
+      /* Elapsed time in drag racing runs from the car rolling out of the
+         beams, not from the green - reaction is a separate number, and
+         adding the two is what decides the race. Keeping them apart is the
+         difference between a quoted ET and a quoted ET that means anything. */
+      if(car.launchAt === undefined && Math.abs(car.vf) > 0.1) car.launchAt = G.t;
+      if(car.along >= DRAG_LEN && !car.finished){
+        car.finished = true;
+        car.finishTime = G.t;                              // decides who won
+        car.et = G.t - (car.launchAt === undefined ? 0 : car.launchAt);
+        car.trap = Math.abs(car.vf);                       // speed through the traps
+        G.finished.push(car);
+        if(car.isYou) endRace();
+      }
+    } else if(G.kind !== 'roam' && car.lap > G.laps && !car.finished){
       car.finished = true;
       car.finishTime = G.t;
       G.finished.push(car);
@@ -317,19 +374,42 @@ function drawHUD(){
   $('gear').className = within > 0.93 ? 'flash' : '';
   $('rev').style.width = (within * 100).toFixed(0) + '%';
 
-  $('vLap').textContent = clamp(you.lap, 1, G.laps) + '/' + G.laps;
-  $('vPos').textContent = positionOf(G.cars, you) + '/' + G.cars.length;
-  $('vTime').textContent = fmtTime(G.started ? G.t - you.lapStart : 0);
-
   var split = $('vSplit');
-  var best = SAVE.best[G.track.key];
-  if(best && you.best){
-    var d = you.best - best;
-    split.textContent = fmtGap(d);
-    split.className = 'split ' + (d > 0 ? 'up' : 'dn');
-  } else {
-    split.textContent = you.best ? 'best ' + fmtTime(you.best) : '';
+
+  if(G.kind === 'drag'){
+    /* Short enough to fit a phone: a long '132/402 M' wrapped out of its
+       tile and over the clock. */
+    $('lblLap').textContent = 'To go';
+    $('vLap').textContent = Math.max(0, Math.round(DRAG_LEN - you.along)) + ' m';
+    $('vPos').textContent = positionOf(G.cars, you) + '/' + G.cars.length;
+    $('vTime').textContent = fmtTime(G.started ? G.t : 0);
+    split.textContent = G.foul ? 'red light'
+                      : (G.react !== null ? 'RT ' + G.react.toFixed(3) : 'stage');
+    split.className = 'split ' + (G.foul ? 'up' : '');
+
+  } else if(G.kind === 'roam'){
+    $('lblLap').textContent = 'Where';
+    $('vLap').textContent = you.off ? 'Field' : 'Road';
+    $('vPos').textContent = '—';
+    $('vTime').textContent = fmtTime(G.t);
+    split.textContent = '';
     split.className = 'split';
+
+  } else {
+    $('lblLap').textContent = 'Lap';
+    $('vLap').textContent = clamp(you.lap, 1, G.laps) + '/' + G.laps;
+    $('vPos').textContent = positionOf(G.cars, you) + '/' + G.cars.length;
+    $('vTime').textContent = fmtTime(G.started ? G.t - you.lapStart : 0);
+
+    var best = SAVE.best[G.track.key];
+    if(best && you.best){
+      var d = you.best - best;
+      split.textContent = fmtGap(d);
+      split.className = 'split ' + (d > 0 ? 'up' : 'dn');
+    } else {
+      split.textContent = you.best ? 'best ' + fmtTime(you.best) : '';
+      split.className = 'split';
+    }
   }
 
   if(bannerTimer > 0){
@@ -413,6 +493,8 @@ function endRace(){
   var order = standings(G.cars);
   var pos = order.indexOf(you) + 1;
 
+  if(G.kind === 'drag'){ endDrag(order, pos); return; }
+
   /* Best lap is kept per track, across every race run there. */
   if(you.best !== null){
     var prev = SAVE.best[G.track.key];
@@ -453,6 +535,46 @@ function endRace(){
   var note = '<b style="color:var(--amber)">+' + money(prize) + '</b> credits.';
   if(you.best !== null) note += ' Best lap ' + fmtTime(you.best) + '.';
   if(SAVE.best[G.track.key] === you.best && you.best !== null) note += ' A new record here.';
+  $('resNote').innerHTML = note;
+
+  updateMenu();
+  show('ovResult');
+}
+
+/* A drag result is a different set of numbers from a race result: elapsed
+   time and trap speed, and the reaction that decided half of it. */
+function endDrag(order, pos){
+  var you = G.you;
+  var prize = pos === 1 ? 2600 : 900;
+  SAVE.credits += prize;
+
+  /* Best quarter mile is kept per car, so improving the car shows up. */
+  if(!SAVE.bestEt) SAVE.bestEt = {};
+  var prev = SAVE.bestEt[you.key];
+  var isBest = you.finished && (!prev || you.finishTime < prev);
+  if(isBest) SAVE.bestEt[you.key] = you.finishTime;
+  saveNow();
+
+  $('resTitle').textContent = G.foul ? 'Red light' : (pos === 1 ? 'Won it' : 'Lost it');
+  $('resSub').innerHTML = 'A quarter mile at ' + G.track.name + '.';
+
+  var rows = '';
+  for(var i = 0; i < order.length; i++){
+    var car = order[i];
+    var et = car.finished ? car.et.toFixed(3) + 's' : 'DNF';
+    var tr = car.finished ? Math.round(car.trap * MPS_TO_MPH) + ' mph' : '-';
+    rows += '<tr' + (car.isYou ? ' class="you"' : '') + '>' +
+            '<td class="p">' + (i + 1) + '</td>' +
+            '<td>' + car.name + '</td>' +
+            '<td style="color:var(--muted);font-size:11.5px">' + CARS[car.key].name + '</td>' +
+            '<td class="t">' + et + ' &middot; ' + tr + '</td></tr>';
+  }
+  $('resTable').innerHTML = rows;
+
+  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b> credits.';
+  if(G.react !== null) note += ' Reaction ' + G.react.toFixed(3) + 's.';
+  if(G.foul) note += ' You left before the green.';
+  if(isBest) note += ' Your best quarter in this car.';
   $('resNote').innerHTML = note;
 
   updateMenu();
@@ -502,6 +624,8 @@ function frame(ts){
 
 function wire(){
   $('btnCareer').onclick = openEvents;
+  $('btnDrag').onclick = startDrag;
+  $('btnRoam').onclick = startRoam;
   $('btnQuick').onclick = function(){
     var keys = Object.keys(TRACKS);
     var pick = keys[Math.floor(Math.random() * keys.length)];

@@ -21,7 +21,28 @@ var BODIES = {
   rally:  { len: 4.2, wide: 1.86, ride: 0.36, hood: 0.54, roof: 0.82,
             cabF: -0.10, cabL: 1.86, nose: 0.46, tail: 0.34, wheel: 0.34, arch: 0.13 },
   proto:  { len: 4.6, wide: 1.96, ride: 0.17, hood: 0.34, roof: 0.52,
-            cabF: -0.25, cabL: 1.34, nose: 0.82, tail: 0.54, wheel: 0.34, arch: 0.11 }
+            cabF: -0.25, cabL: 1.34, nose: 0.82, tail: 0.54, wheel: 0.34, arch: 0.11 },
+
+  /* The turbo cars: long bonnet, low roof, cabin pushed well back. */
+  a80:    { len: 4.51, wide: 1.81, ride: 0.24, hood: 0.46, roof: 0.68,
+            cabF: -0.45, cabL: 1.55, nose: 0.80, tail: 0.42, wheel: 0.33, arch: 0.08 },
+  a90:    { len: 4.38, wide: 1.85, ride: 0.24, hood: 0.48, roof: 0.68,
+            cabF: -0.42, cabL: 1.42, nose: 0.72, tail: 0.40, wheel: 0.33, arch: 0.09 },
+
+  /* The supercharged ones: long, wide and flat-roofed. */
+  hellcoupe: { len: 5.02, wide: 1.92, ride: 0.26, hood: 0.54, roof: 0.72,
+            cabF: -0.40, cabL: 1.80, nose: 0.70, tail: 0.56, wheel: 0.34, arch: 0.09 },
+  hellsedan: { len: 5.10, wide: 1.90, ride: 0.27, hood: 0.52, roof: 0.74,
+            cabF: -0.25, cabL: 2.10, nose: 0.66, tail: 0.52, wheel: 0.34, arch: 0.09 },
+
+  /* Trucks. Tall, upright, and sitting on much larger wheels. The pickup
+     carries a `bed`, which is the length of open cargo area behind its cab -
+     the one piece of bodywork nothing else here has. */
+  suv:    { len: 5.08, wide: 1.94, ride: 0.52, hood: 0.78, roof: 1.34,
+            cabF: -0.10, cabL: 2.45, nose: 0.52, tail: 0.34, wheel: 0.42, arch: 0.12 },
+  pickup: { len: 5.70, wide: 2.08, ride: 0.62, hood: 0.86, roof: 1.46,
+            cabF: 0.70, cabL: 1.70, nose: 0.58, tail: 0.22, wheel: 0.47, arch: 0.15,
+            bed: 2.00 }
 };
 
 /* Materials get reused across every car on the grid - five cars each making
@@ -102,9 +123,14 @@ function buildWheel(radius, width, rimColour){
 
 /* --------------------------------------------------------------- the car -- */
 
-function buildCar(carKey, looks){
+/* `lift` is ride height added by a lift kit, in metres, straight off
+   carStats - so the truck you see on the grid is the one the physics is
+   driving, down to how far off the ground it is sitting. Bigger tyres come
+   with it, because that is what a lift kit actually is. */
+function buildCar(carKey, looks, lift){
   var def = CARS[carKey];
   var b = BODIES[def.body] || BODIES.coupe;
+  lift = lift || 0;
   looks = looks || { paint: defaultPaint(carKey), wheel: 1, stripe: 0, spoiler: false };
 
   var paint = (PAINTS[looks.paint] || PAINTS[0]).c;
@@ -113,7 +139,7 @@ function buildCar(carKey, looks){
 
   var root = new T.Group();
   var hull = new T.Group();
-  hull.position.y = b.ride;
+  hull.position.y = b.ride + lift;
   root.add(hull);
 
   var L = b.len, W = b.wide;
@@ -170,9 +196,23 @@ function buildCar(carKey, looks){
     }
   }
 
+  /* a pickup's bed: an open box behind the cab, with a tailgate */
+  if(b.bed){
+    var bedZ = b.cabF - b.cabL / 2 - b.bed / 2;
+    var wallH = (b.roof - b.hood) * 0.72;
+    var wallY = b.hood + wallH / 2;
+    for(var sw = -1; sw <= 1; sw += 2){
+      hull.add(box(W * 0.07, wallH, b.bed, paint, sw * (W / 2 - W * 0.035), wallY, bedZ));
+    }
+    hull.add(box(W * 0.93, wallH, 0.09, paint, 0, wallY, bedZ + b.bed / 2));   // bulkhead
+    hull.add(box(W * 0.93, wallH, 0.09, paint, 0, wallY, bedZ - b.bed / 2));   // tailgate
+    hull.add(box(W * 0.88, 0.05, b.bed * 0.96, DARK, 0, b.hood + 0.03, bedZ)); // floor
+  }
+
   /* ------------------------------------------------------------ wheels -- */
 
-  var wr = b.wheel, ww = 0.26;
+  /* A lift goes on tyres as well as springs, so the wheels grow with it. */
+  var wr = b.wheel + lift * 0.42, ww = 0.26 + lift * 0.22;
   var axleF = (L - b.nose - b.tail) / 2 - 0.18;
   var axleR = -(L - b.nose - b.tail) / 2 + 0.22;
   var halfTrack = W / 2 - ww / 2 + b.arch * 0.4;
@@ -192,7 +232,7 @@ function buildCar(carKey, looks){
 
     /* arch over each wheel, so the body does not float above them */
     hull.add(box(0.14, b.arch * 2, wr * 2.3, paint,
-                 side * (W / 2 - 0.02), b.hood * 0.9, z - b.ride));
+                 side * (W / 2 - 0.02), b.hood * 0.9, z - b.ride - lift));
   }
 
   root.userData.paintMat = mat(paint);

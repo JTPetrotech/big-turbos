@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Redline</title>
+<title>Big Turbos</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2307070a'/><path d='M10 40 h6 l5 -11 h22 l5 11 h6 v8 h-6 a5 5 0 0 1 -10 0 h-12 a5 5 0 0 1 -10 0 h-6 z' fill='%23ff3b30'/><path d='M23 33 h18 l-3 -6 h-12 z' fill='%23ffd166'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,6 +41,17 @@ body > canvas{display:block;position:fixed;inset:0;width:100%;height:100%;z-inde
 #tTime{top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));text-align:right;min-width:104px}
 #tTime .val{font-size:25px}
 #tTime .split{font-size:11px;font-family:var(--body);font-weight:700;margin-top:1px;height:13px}
+/* The three tiles are pinned left, centre and right, so on a narrow phone a
+   long middle value ('To go 268 m') grew into the clock. Shrink them rather
+   than let them overlap. */
+@media (max-width:430px){
+  .tile{padding:5px 8px;border-radius:10px}
+  .tile .val{font-size:21px}
+  #tTime .val{font-size:18px}
+  #tLap{min-width:76px}
+  #tTime{min-width:74px}
+  .tile .lbl{font-size:8px;letter-spacing:.12em}
+}
 .split.up{color:var(--red)} .split.dn{color:var(--green)}
 
 /* speed + revs, bottom right */
@@ -186,11 +197,11 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 </head>
 <body>
 
-<div id="loading"><div>REDLINE</div></div>
+<div id="loading"><div>BIG TURBOS</div></div>
 
 <div id="hud">
   <div class="tile" id="tPos"><div class="lbl">Pos</div><div class="val" id="vPos">1/4</div></div>
-  <div class="tile" id="tLap"><div class="lbl">Lap</div><div class="val" id="vLap">1/3</div></div>
+  <div class="tile" id="tLap"><div class="lbl" id="lblLap">Lap</div><div class="val" id="vLap">1/3</div></div>
   <div class="tile" id="tTime"><div class="lbl">Time</div><div class="val" id="vTime">0:00.0</div>
     <div class="split" id="vSplit"></div></div>
   <div id="gear">1</div>
@@ -214,13 +225,17 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 <!-- menu -->
 <div class="ov on" id="ovMenu">
   <div class="card">
-    <h1>RED<em>LINE</em></h1>
+    <h1>BIG<em>TURBOS</em></h1>
     <p class="sub" style="text-align:center">Arcade racing with a garage that matters.
       Win credits, buy parts, feel the car change underneath you.</p>
     <div id="wallet"><span>Credits</span><b id="vCredits">0</b></div>
     <div class="btns">
       <button class="go" id="btnCareer">Career</button>
       <button class="go alt" id="btnQuick">Quick race</button>
+    </div>
+    <div class="btns">
+      <button class="go alt" id="btnDrag">Drag strip</button>
+      <button class="go alt" id="btnRoam">Free roam</button>
     </div>
     <div class="nav">
       <button class="mini" id="btnGarage">Garage</button>

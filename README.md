@@ -1,9 +1,12 @@
-# Redline
+# Big Turbos
 
 Arcade racing with a garage that matters. One HTML file, no install, no
 network, nothing to buy with real money.
 
 Open `index.html` and drive.
+
+(It was called Redline until it grew a drag strip. An old save is carried
+over automatically the first time you open it.)
 
 ## The idea
 
@@ -21,13 +24,56 @@ expensive ones buy a **trade** rather than a straight win:
 | Long gears | Enormous down a straight | Lazy away from a stop |
 | Stripped shell | Quicker everywhere | The back end gets nervous |
 | Big turbo | +42% once it is spinning | Nothing at all below 58 mph |
+| Lift kit | Grip in a field, and the look | Grip, top speed and calm on tarmac |
 
 So the garage is a set of decisions rather than a queue. A car built for
 Ridgeback is the wrong car for Dockside.
 
+A lift kit is only sold for the two trucks, and it is the clearest trade in
+the game: a 6in lift on 37s gives away 16% of the truck's grip and a good
+deal of its top speed, and in exchange it is the only thing here that can
+cross a field in a hurry. There is nowhere to use that in a race. There is
+free roam.
+
 The preview in the garage is produced by the same `carStats()` call the
 physics uses — not a second table someone typed the numbers into twice. If
 it says a part adds 12 kW, the car gets 12 kW.
+
+## The cars
+
+Eleven of them. The five originals, plus a pair of turbo coupes and the big
+supercharged stuff:
+
+| | kW | kg | 0-60 | 1/4 mile |
+|---|---|---|---|---|
+| Apex A80 Twin-Turbo | 239 | 1,570 | 4.5s | 13.27s @ 102 mph |
+| Apex A90 | 285 | 1,540 | 3.8s | 12.50s @ 109 mph |
+| Hellion 6.2 Coupe | 527 | 1,975 | 3.5s | 11.92s @ 117 mph |
+| Hellion 6.2 Sedan | 527 | 2,050 | 3.6s | 12.07s @ 116 mph |
+| Hellion Wagon | 529 | 2,470 | 4.1s | 12.75s @ 109 mph |
+| Warhawk TRX | 523 | 2,900 | 4.8s | 13.58s @ 100 mph |
+
+Nobody typed those quarter-mile times in. They are what the driving model
+produces when you point each car down the strip, and they land within a few
+tenths of the real cars these are drawn from.
+
+The turbo cars carry their induction from the factory, so an A80 is already
+making boost from 22 mph before you fit anything. The supercharged ones have
+no lag at all, and a great deal of power instead.
+
+## The modes
+
+**Career** and **quick race** are the laps. Two more are not:
+
+**Drag strip** is a quarter mile, two lanes and a set of lights. Three ambers
+then green; leaving early is a red light and the card says so. Elapsed time
+runs from the car rolling off the line, not from the green, because that is
+how it is actually measured - reaction time is its own number, and adding the
+two is what decides who won.
+
+**Free roam** has no clock, no grid and no barrier. The road is a suggestion
+and the 1.3 km field around it is the point. It is also the only place a lift
+kit earns its money.
 
 ## Driving
 
@@ -103,14 +149,21 @@ out from a standstill, that a car stopped on the grass can drive back to the
 road (while the grass is still much slower than the road), and that a car
 wedged nose-first into the barrier is not stuck there for good.
 
+And it checks the two new modes: that a quarter mile flat out holds its lane
+to within a millimetre, that the ETs stay in the range the real cars run,
+that free roam really has no barrier but still has an edge of the world, and
+that a lift kit grips in a field where the same truck stock slides.
+
 `serve.js` is not part of the game — it serves the folder on
 `http://localhost:8123` so the game can be played in a browser that will not
 open a `file://` page. The game itself still opens straight from disk.
 
 ## Saving
 
-`localStorage`, under `redline_v1`. Credits, cars, parts, paint, career
-progress and best laps per track. Nothing leaves the device.
+`localStorage`, under `bigturbos_v1` - a `redline_v1` save is imported once
+and left alone after that. Credits, cars, parts, paint, career progress, best
+laps per track and your best quarter mile per car. Nothing leaves the
+device.
 
 ## Money
 

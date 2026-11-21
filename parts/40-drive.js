@@ -17,6 +17,8 @@
 var CAR_RADIUS = 1.5;         // for car-to-car contact, metres
 var OFF_GRIP = 0.55;          // what is left of your grip on the grass
 var OFF_DRAG = 5.2;           // extra deceleration out there, m/s^2
+var WORLD_EDGE = 660;         // half the ground plane, for free roam
+var DRAG_LEN = 402.336;       // a quarter of a mile, in metres
 
 function makeCar(carKey, parts, opts){
   opts = opts || {};
@@ -66,7 +68,10 @@ function stepCar(car, track, input, dt){
 
   /* ---- grip available right now ---- */
   var grip = gripAt(s, speed);
-  if(car.off) grip *= OFF_GRIP;
+  /* Off the road, grip falls away - unless the car was built for it. An
+     all-terrain tyre is worse than a semi-slick on tarmac and better than
+     anything here on grass, which is the whole trade a lift kit sells. */
+  if(car.off) grip *= OFF_GRIP + (1 - OFF_GRIP) * (s.offroad || 0);
   if(hand) grip *= 0.42;               // handbrake: deliberately break traction
   var gripForce = grip * s.mass * GRAV;
 
@@ -86,7 +91,8 @@ function stepCar(car, track, input, dt){
        also came to more than some cars' entire reverse authority, so a car
        stopped on the grass could never get going again. It eases off near
        standstill, the way soft ground really behaves. */
-    af -= OFF_DRAG * clamp(speed / 6, 0.15, 1) * sign(car.vf);
+    af -= OFF_DRAG * (1 - 0.65 * (s.offroad || 0)) *
+          clamp(speed / 6, 0.15, 1) * sign(car.vf);
   }
 
   car.vf += af * dt;
@@ -148,6 +154,25 @@ function stepCar(car, track, input, dt){
      accelerate off nor turn away. Killing just the outward component leaves
      whatever was running along the barrier, so the car scrubs down it, keeps
      enough speed to steer, and can be driven or reversed back to the road. */
+  /* Free roam has no barrier at all - the road is a suggestion and the field
+     around it is the point. The only hard edge is the ground itself, and it
+     takes away just the velocity leaving the world, for the same reason the
+     barrier below does. */
+  if(track.open){
+    if(Math.abs(car.x) > WORLD_EDGE || Math.abs(car.z) > WORLD_EDGE){
+      var ey = Math.sin(car.yaw), ec = Math.cos(car.yaw);
+      var ex = car.vf * ey + car.vl * ec;
+      var ez = car.vf * ec - car.vl * ey;
+      if(car.x >  WORLD_EDGE){ car.x =  WORLD_EDGE; if(ex > 0) ex = 0; }
+      if(car.x < -WORLD_EDGE){ car.x = -WORLD_EDGE; if(ex < 0) ex = 0; }
+      if(car.z >  WORLD_EDGE){ car.z =  WORLD_EDGE; if(ez > 0) ez = 0; }
+      if(car.z < -WORLD_EDGE){ car.z = -WORLD_EDGE; if(ez < 0) ez = 0; }
+      car.vf = ex * ey + ez * ec;
+      car.vl = ex * ec - ez * ey;
+    }
+    return;
+  }
+
   var limit = track.width / 2 + 7;
   if(Math.abs(where.lateral) > limit){
     var over = Math.abs(where.lateral) - limit;
@@ -172,6 +197,28 @@ function stepCar(car, track, input, dt){
        as you stay in contact, which is what made a long graze stop you dead. */
     car.vf = wx * by + wz * bc;
     car.vl = wx * bc - wz * by;
+  }
+}
+
+/* A drag race stages both cars level, on the line, rather than stringing them
+   out down the road the way a rolling grid does. Distance is then just
+   `along`, because the strip is straight and nobody reaches a corner. */
+function stageDrag(cars, track){
+  for(var i = 0; i < cars.length; i++){
+    var car = cars[i];
+    var p = track.pts[0];
+    var rx = Math.cos(p.dir), rz = -Math.sin(p.dir);
+    var side = (i % 2 === 0 ? -1 : 1) * track.width * 0.16;
+
+    car.x = p.x + rx * side;
+    car.z = p.z + rz * side;
+    car.yaw = p.dir;
+    car.vf = 0; car.vl = 0; car.yawRate = 0; car.steer = 0;
+    car.lap = 0; car.hint = 0;
+    car.along = 0; car.lastAlong = 0; car.progress = 0; car.lateral = side;
+    car.finished = false; car.finishTime = null;
+    car.lapTimes = []; car.best = null; car.lapStart = 0;
+    car.off = false; car.trap = 0; car.et = 0; car.launchAt = undefined;
   }
 }
 

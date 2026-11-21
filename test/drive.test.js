@@ -17,17 +17,18 @@ function build(){
   H.run(ctx, 'var SAVE = {parts:{}, looks:{}}; function saveNow(){}');
   H.run(ctx, 'var G = {t:0};');
   H.run(ctx, H.grabVar(track, ['TRACKS']));
-  H.run(ctx, H.grab(track, ['catmull', 'resample', 'buildTrack', 'nearest', 'finishNearest']));
-  H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'CLASSES', 'EVENTS']));
+  H.run(ctx, H.grab(track, ['catmull', 'resample', 'stripPoints', 'buildTrack', 'nearest', 'finishNearest']));
+  H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'CLASSES', 'EVENTS']));
   H.run(ctx, H.grab(gar, [
+    'isTruck', 'slotFits', 'slotsFor',
     'slotByKey', 'carStats', 'rollingForce', 'driveForce', 'tractionLimit',
     'dragForce', 'dragLimited', 'topSpeed', 'forceAt', 'zeroTo60', 'gripAt',
     'rating', 'classOf'
   ]));
-  H.run(ctx, 'var CAR_RADIUS = 1.5, OFF_GRIP = 0.55, OFF_DRAG = 5.2;');
+  H.run(ctx, 'var CAR_RADIUS = 1.5, OFF_GRIP = 0.55, OFF_DRAG = 5.2, WORLD_EDGE = 660, DRAG_LEN = 402.336;');
   H.run(ctx, H.grab(drive, [
     'makeCar', 'stepCar', 'updateProgress', 'separate', 'aiInput',
-    'gridUp', 'standings', 'positionOf'
+    'gridUp', 'stageDrag', 'standings', 'positionOf'
   ]));
   return ctx;
 }
@@ -266,6 +267,117 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
   hold(glance, GO, 2);
   H.ok(glance.vf > 4, 'and one that glances off it keeps moving',
        glance.vf.toFixed(1) + ' m/s');
+}
+
+/* ------------------------------------------------------- the drag strip -- */
+
+{
+  console.log('\n  the drag strip');
+  const strip = ctx.buildTrack('strip');
+
+  /* Run a single car from the line to the quarter-mile marker, flat out. */
+  const quarter = (key, parts) => {
+    const c = ctx.makeCar(key, parts || {});
+    ctx.stageDrag([c], strip);
+    const lane = c.lateral;                    // the lane it was staged in
+    let t = 0, wander = 0;
+    while(c.along < 402.336 && t < 60){
+      ctx.stepCar(c, strip, { throttle: 1, brake: 0, steer: 0, hand: false }, DT);
+      t += DT;
+      wander = Math.max(wander, Math.abs(c.lateral - lane));
+    }
+    return { et: t, trap: c.vf * 2.23694, wander: wander, done: c.along >= 402.336 };
+  };
+
+  /* The whole point of laying the strip out by hand instead of splining it:
+     flat out with the wheel straight, you stay in your lane. */
+  const hc = quarter('hellcoupe');
+  H.ok(hc.wander < 0.05, 'a quarter mile flat out holds its lane',
+       'wandered ' + hc.wander.toFixed(3) + ' m');
+
+  /* Real figures for the cars these are drawn from: a supercharged coupe runs
+     the quarter in a bit over eleven, a 85 kW hatchback in about seventeen.
+     If the model stops producing times in that range it has drifted. */
+  const hatch = quarter('hatch');
+  H.ok(hc.et > 10.5 && hc.et < 13,
+       'the supercharged coupe runs a believable quarter', hc.et.toFixed(2) + 's at ' +
+       Math.round(hc.trap) + ' mph');
+  H.ok(hatch.et > 15 && hatch.et < 19,
+       'and the shopping car runs a believably awful one', hatch.et.toFixed(2) + 's at ' +
+       Math.round(hatch.trap) + ' mph');
+  H.ok(hc.et < hatch.et - 3 && hc.trap > hatch.trap + 20,
+       'the quick car wins on both ET and trap speed');
+
+  /* Tyres are worth time down a straight too, not only in corners. */
+  const slick = quarter('hellcoupe', { tyres: 3 });
+  H.ok(slick.et < hc.et, 'better tyres are worth ET off the line',
+       hc.et.toFixed(2) + 's -> ' + slick.et.toFixed(2) + 's');
+
+  /* Two cars staged together start level and side by side. */
+  const pair = [ctx.makeCar('a90', {}), ctx.makeCar('a80', {})];
+  ctx.stageDrag(pair, strip);
+  H.ok(Math.abs(pair[0].along - pair[1].along) < 0.01,
+       'both cars stage level at the line');
+  H.ok(Math.hypot(pair[0].x - pair[1].x, pair[0].z - pair[1].z) > 3,
+       'and side by side rather than on top of each other',
+       Math.hypot(pair[0].x - pair[1].x, pair[0].z - pair[1].z).toFixed(1) + ' m apart');
+}
+
+/* --------------------------------------------------------- free roam -- */
+
+{
+  console.log('\n  free roam');
+  const open = ctx.buildTrack('roam');
+  H.ok(open.open === true, 'the roam map has no barrier');
+
+  /* Drive off the side and keep going: on a normal track the barrier stops
+     you seven metres past the kerb, out here nothing should. */
+  const c = ctx.makeCar('trx', { lift: 2 });
+  ctx.gridUp([c], open);
+  for(let i = 0; i < 60 * 14; i++){
+    ctx.stepCar(c, open, { throttle: 1, brake: 0, steer: 0.55, hand: false }, DT);
+  }
+  H.ok(Math.abs(c.lateral) > open.width / 2 + 7,
+       'a car can leave the road entirely', Math.abs(c.lateral).toFixed(0) + ' m off it');
+
+  /* ...but not off the edge of the world. */
+  const far = ctx.makeCar('hellcoupe', {});
+  ctx.gridUp([far], open);
+  far.x = 640; far.z = 0; far.yaw = Math.PI / 2; far.vf = 60;
+  for(let i = 0; i < 60 * 20; i++){
+    ctx.stepCar(far, open, { throttle: 1, brake: 0, steer: 0, hand: false }, DT);
+  }
+  H.ok(Math.abs(far.x) <= 661, 'and not off the edge of the world',
+       'stopped at x=' + far.x.toFixed(0));
+
+  /* What a lift kit actually buys. Comparing the same truck to itself keeps
+     power and weight out of it, so what is left is the grip - which is the
+     whole trade. Straight-line speed across a field is not the test: a
+     Hellion has enough power to out-drag a truck anywhere, and still cannot
+     point itself at anything once it is off the tarmac. */
+  const slideOnGrass = (parts) => {
+    const car = ctx.makeCar('trx', parts);
+    ctx.gridUp([car], open);
+    car.x += 60;                                 // out in the field
+    car.hint = 0; car.vf = 22;
+    let worst = 0;
+    for(let i = 0; i < 60 * 2.5; i++){
+      ctx.stepCar(car, open, { throttle: 0.5, brake: 0, steer: 1, hand: false }, DT);
+      worst = Math.max(worst, Math.abs(car.vl));
+    }
+    return worst;
+  };
+  const stockSlide = slideOnGrass({});
+  const liftedSlide = slideOnGrass({ lift: 3 });
+  H.ok(liftedSlide < stockSlide,
+       'a lift kit grips in a field where the same truck stock slides',
+       stockSlide.toFixed(2) + ' -> ' + liftedSlide.toFixed(2) + ' m/s of slide');
+
+  /* ...and the other half of the bargain: it is worse on tarmac. */
+  H.ok(ctx.carStats('trx', { lift: 3 }).grip < ctx.carStats('trx', {}).grip,
+       'and gives grip away on the road to get it',
+       ctx.carStats('trx', {}).grip.toFixed(2) + ' -> ' +
+       ctx.carStats('trx', { lift: 3 }).grip.toFixed(2));
 }
 
 /* ------------------------------------------------------------- the grid -- */

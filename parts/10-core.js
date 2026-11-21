@@ -165,7 +165,8 @@ function gatherInput(){
 
 /* ------------------------------------------------------------------- save -- */
 
-var SAVE_KEY = 'redline_v1';
+var SAVE_KEY = 'bigturbos_v1';
+var OLD_SAVE_KEYS = ['redline_v1'];   // the game was called Redline until it wasn't
 var SAVE = null;
 
 function freshSave(){
@@ -184,6 +185,14 @@ function freshSave(){
 function loadSave(){
   try {
     var raw = localStorage.getItem(SAVE_KEY);
+    /* Carry a save over from a previous name of the game rather than
+       quietly handing a returning player an empty garage. */
+    if(!raw){
+      for(var o = 0; o < OLD_SAVE_KEYS.length; o++){
+        var was = localStorage.getItem(OLD_SAVE_KEYS[o]);
+        if(was){ raw = was; localStorage.setItem(SAVE_KEY, was); break; }
+      }
+    }
     SAVE = raw ? JSON.parse(raw) : freshSave();
   } catch(e){ SAVE = freshSave(); }
 
