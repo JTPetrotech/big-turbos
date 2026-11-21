@@ -98,6 +98,15 @@ of better tyres is enough to win a race. That last check is the one that
 matters — it is the difference between a shop that sells numbers and a shop
 that sells lap time.
 
+It also checks you can always get going again: that the brake reverses you
+out from a standstill, that a car stopped on the grass can drive back to the
+road (while the grass is still much slower than the road), and that a car
+wedged nose-first into the barrier is not stuck there for good.
+
+`serve.js` is not part of the game — it serves the folder on
+`http://localhost:8123` so the game can be played in a browser that will not
+open a `file://` page. The game itself still opens straight from disk.
+
 ## Saving
 
 `localStorage`, under `redline_v1`. Credits, cars, parts, paint, career

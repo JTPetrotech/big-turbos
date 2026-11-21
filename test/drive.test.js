@@ -201,6 +201,73 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
        'turned ' + Math.abs(rolling.yaw - yaw1).toFixed(2) + ' rad in 1s');
 }
 
+/* --------------------------------------------------- getting unstuck -- */
+
+/* Three ways a player used to be able to park the game. All of them were
+   invisible in the source and obvious the moment you drove off a corner. */
+{
+  console.log('\n  getting unstuck');
+
+  /* Put a car at a given offset from the racing line, pointing somewhere. */
+  const place = (c, i, lateral, yaw) => {
+    const p = tr.pts[i];
+    c.x = p.x + Math.cos(p.dir) * lateral;
+    c.z = p.z - Math.sin(p.dir) * lateral;
+    c.yaw = yaw;
+    c.vf = 0; c.vl = 0; c.yawRate = 0; c.steer = 0; c.hint = i;
+    return c;
+  };
+  const hold = (c, input, secs) => {
+    for(let k = 0; k < Math.round(secs * 60); k++) ctx.stepCar(c, tr, input, DT);
+  };
+  const GO   = { throttle: 1, brake: 0, steer: 0, hand: false };
+  const BACK = { throttle: 0, brake: 1, steer: 0, hand: false };
+
+  /* Reverse used to add acceleration instead of subtracting it, so holding
+     the brake from rest crept you forwards at walking pace for ever. */
+  const rev = ctx.makeCar('hatch', {});
+  place(rev, 40, 0, tr.pts[40].dir);
+  hold(rev, BACK, 2);
+  H.ok(rev.vf < -2, 'holding the brake from rest actually reverses',
+       rev.vf.toFixed(1) + ' m/s');
+
+  /* Off-track drag was a flat 5.2 m/s^2 — more than some cars could answer
+     with, so a car stopped on the grass stayed stopped. */
+  const grass = ctx.makeCar('hatch', {});
+  place(grass, 40, tr.width / 2 + 2, tr.pts[40].dir);
+  hold(grass, GO, 3);
+  H.ok(grass.off && grass.vf > 3, 'a car stopped on the grass can drive again',
+       grass.vf.toFixed(1) + ' m/s after 3s');
+
+  /* ...but the grass must still cost you, or it is a shortcut. */
+  const road = ctx.makeCar('hatch', {});
+  place(road, 40, 0, tr.pts[40].dir);
+  hold(road, GO, 3);
+  H.ok(road.vf > grass.vf + 3, 'and the grass is still much slower than the road',
+       road.vf.toFixed(1) + ' vs ' + grass.vf.toFixed(1) + ' m/s');
+
+  /* The barrier scaled all of vf, so a car that arrived nose-first was
+     pinned: too slow to steer away, too slow to drive away. Backing off it
+     has to work from a dead stop pointing straight at it. */
+  const wedged = ctx.makeCar('hatch', {});
+  const limit = tr.width / 2 + 7;
+  place(wedged, 40, limit + 1, tr.pts[40].dir + Math.PI / 2);   // nose into the barrier
+  hold(wedged, GO, 1);                                          // shove it in hard
+  const stuckAt = Math.abs(wedged.lateral);
+  hold(wedged, BACK, 3);
+  H.ok(Math.abs(wedged.lateral) < stuckAt - 3,
+       'a car wedged nose-first into the barrier can reverse off it',
+       'lateral ' + stuckAt.toFixed(1) + ' m -> ' + Math.abs(wedged.lateral).toFixed(1) + ' m');
+
+  /* And arriving at an angle, it should scrub along rather than stop dead. */
+  const glance = ctx.makeCar('hatch', {});
+  place(glance, 40, limit - 1, tr.pts[40].dir + 0.9);
+  glance.vf = 25;
+  hold(glance, GO, 2);
+  H.ok(glance.vf > 4, 'and one that glances off it keeps moving',
+       glance.vf.toFixed(1) + ' m/s');
+}
+
 /* ------------------------------------------------------------- the grid -- */
 
 const field = [{car:'hatch'},{car:'coupe'},{car:'muscle'},{car:'rally'}].map((e, i) =>

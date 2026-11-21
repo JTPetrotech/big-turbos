@@ -1179,9 +1179,16 @@ function stepCar(car, track, input, dt){
 
   if(brake > 0){
     if(car.vf > 0.4) af -= s.brake * brake;
-    else af += s.brake * brake * 0.55;      // held on, it reverses out
+    else af -= s.brake * brake * 0.55;      // held on, it reverses out
   }
-  if(car.off) af -= OFF_DRAG * sign(car.vf);
+  if(car.off){
+    /* Resistance, not a wall. At racing speed the full penalty applies,
+       which is what stops the grass being a shortcut; but held constant it
+       also came to more than some cars' entire reverse authority, so a car
+       stopped on the grass could never get going again. It eases off near
+       standstill, the way soft ground really behaves. */
+    af -= OFF_DRAG * clamp(speed / 6, 0.15, 1) * sign(car.vf);
+  }
 
   car.vf += af * dt;
   if(Math.abs(car.vf) < 0.05 && throttle === 0) car.vf = 0;
@@ -1233,16 +1240,39 @@ function stepCar(car, track, input, dt){
   car.along = where.along;
 
   /* A barrier a couple of metres beyond the kerb, rather than open country:
-     it keeps a spin from putting anyone half a mile into the scenery. */
+     it keeps a spin from putting anyone half a mile into the scenery.
+
+     Only the velocity heading *into* the barrier is taken away. Scaling the
+     whole of vf instead pinned any car that arrived nose-first: every frame
+     it touched, its speed was cut by nearly half, and because steering
+     authority fades to nothing below walking pace, it could neither
+     accelerate off nor turn away. Killing just the outward component leaves
+     whatever was running along the barrier, so the car scrubs down it, keeps
+     enough speed to steer, and can be driven or reversed back to the road. */
   var limit = track.width / 2 + 7;
   if(Math.abs(where.lateral) > limit){
     var over = Math.abs(where.lateral) - limit;
     var p = track.pts[where.i];
-    var nx = Math.cos(p.dir), nz = -Math.sin(p.dir);
-    car.x -= nx * over * sign(where.lateral);
-    car.z -= nz * over * sign(where.lateral);
-    car.vf *= 0.55;
-    car.vl *= -0.2;
+    var side = sign(where.lateral);
+    var ox = Math.cos(p.dir) * side, oz = -Math.sin(p.dir) * side;   // away from the road
+    car.x -= ox * over;
+    car.z -= oz * over;
+
+    var by = Math.sin(car.yaw), bc = Math.cos(car.yaw);
+    var wx = car.vf * by + car.vl * bc;
+    var wz = car.vf * bc - car.vl * by;
+
+    var into = wx * ox + wz * oz;          // how fast we are still leaving the road
+    if(into > 0){                          // a car already heading back is left alone
+      wx -= into * ox;
+      wz -= into * oz;
+    }
+    /* Nothing is scrubbed off along the barrier on purpose: the car is off
+       the road already, so grass drag and the tyres fighting the slide take
+       their cut anyway. An extra per-frame factor here compounds for as long
+       as you stay in contact, which is what made a long graze stop you dead. */
+    car.vf = wx * by + wz * bc;
+    car.vl = wx * bc - wz * by;
   }
 }
 
