@@ -25,6 +25,9 @@ expensive ones buy a **trade** rather than a straight win:
 | Stripped shell | Quicker everywhere | The back end gets nervous |
 | Big turbo | +42% once it is spinning | Nothing at all below 58 mph |
 | Lift kit | Grip in a field, and the look | Grip, top speed and calm on tarmac |
+| Nitrous | +62% while you hold it | 34 kg carried every lap, and it runs out |
+| Spool diff | Drives off the apex | Will not turn into one |
+| Race clutch | A second off the line | Nothing at all after that |
 
 So the garage is a set of decisions rather than a queue. A car built for
 Ridgeback is the wrong car for Dockside.
@@ -41,8 +44,8 @@ it says a part adds 12 kW, the car gets 12 kW.
 
 ## The cars
 
-Eleven of them. The five originals, plus a pair of turbo coupes and the big
-supercharged stuff:
+Sixteen of them. The five originals, a pair of turbo coupes, the JDM turbo
+stuff, a rear-engined handful, a supercar, and the big supercharged lot:
 
 | | kW | kg | 0-60 | 1/4 mile |
 |---|---|---|---|---|
@@ -52,6 +55,11 @@ supercharged stuff:
 | Hellion 6.2 Sedan | 527 | 2,050 | 3.6s | 12.07s @ 116 mph |
 | Hellion Wagon | 529 | 2,470 | 4.1s | 12.75s @ 109 mph |
 | Warhawk TRX | 523 | 2,900 | 4.8s | 13.58s @ 100 mph |
+| Kaido 13B | 188 | 1,280 | 4.7s | 13.43s @ 100 mph |
+| Lancet RS | 206 | 1,410 | 4.5s | 13.28s @ 100 mph |
+| Nakagawa R34 | 206 | 1,560 | 5.0s | 13.72s @ 97 mph |
+| Pelican 930 | 283 | 1,470 | 3.7s | 12.18s @ 113 mph |
+| Toro SV | 471 | 1,525 | 2.8s | 11.08s @ 124 mph |
 
 Nobody typed those quarter-mile times in. They are what the driving model
 produces when you point each car down the strip, and they land within a few
@@ -70,6 +78,10 @@ then green; leaving early is a red light and the card says so. Elapsed time
 runs from the car rolling off the line, not from the green, because that is
 how it is actually measured - reaction time is its own number, and adding the
 two is what decides who won.
+
+**Championships** are seasons rather than one-offs: four rounds against the
+same three rivals in the same cars every round, ten points for a win, and a
+standings table that is about people you recognise by round three.
 
 **Free roam** has no clock, no grid and no barrier. The road is a suggestion
 and the 1.3 km field around it is the point. It is also the only place a lift
@@ -149,7 +161,15 @@ out from a standstill, that a car stopped on the grass can drive back to the
 road (while the grass is still much slower than the road), and that a car
 wedged nose-first into the barrier is not stuck there for good.
 
-And it checks the two new modes: that a quarter mile flat out holds its lane
+It checks that nitrous is a budget rather than a button: that holding it is
+worth over a second down the strip, that fitting it and *not* using it makes
+you slower than not fitting it at all (you carried the bottle for nothing),
+that it empties, and that it does nothing off the throttle. It checks a spool
+puts power down and gives away steering to do it, and that every body kit
+leaves `carStats` untouched — a kit that quietly added grip would make the
+whole garage a liar.
+
+It also checks the two new modes: that a quarter mile flat out holds its lane
 to within a millimetre, that the ETs stay in the range the real cars run,
 that free roam really has no barrier but still has an edge of the world, and
 that a lift kit grips in a field where the same truck stock slides.
@@ -167,6 +187,15 @@ device.
 
 ## Money
 
-There is none. Credits are earned by driving and only by driving. There is no
-shop, no currency, no ads, and nothing that can be bought with a card — in
-this game or in any of the others here.
+There is no real money in this anywhere. Nothing can be bought with a card,
+there are no ads, no premium currency, no timers to skip and nothing to top
+up — in this game or in any of the others here. A GitHub Pages site could not
+take a payment if it wanted to, and it does not want to.
+
+What there *is* is in-game money, in dollars, won by driving and only by
+driving. The one way it goes down is the side bet: before a career race you
+can stake up to what you are holding, at odds set by how far the field
+outclasses your car. Win and it pays; finish anywhere else and the stake is
+gone. Prize money alone means the number only ever rises, which makes it
+meaningless after an hour — being able to lose it is what gives the rest of
+the garage its weight.

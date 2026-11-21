@@ -36,6 +36,7 @@ function makeCar(carKey, parts, opts){
 
     lap: 0, along: 0, lastAlong: 0, hint: null, progress: 0,
     lateral: 0, off: false,
+    nosLeft: stats.nosTime, nosOn: false,
 
     ai: !!opts.ai,
     skill: opts.skill === undefined ? 1 : opts.skill,
@@ -75,8 +76,21 @@ function stepCar(car, track, input, dt){
   if(hand) grip *= 0.42;               // handbrake: deliberately break traction
   var gripForce = grip * s.mass * GRAV;
 
+  /* ---- nitrous ---- */
+  /* A bottle is a budget, not a button: holding it spends seconds you do not
+     get back until the next race, and it does nothing off the throttle. The
+     weight it adds is carried for the whole race whether you use it or not,
+     which is the trade - a lap you never press it is a lap you were heavier
+     for nothing. */
+  car.nosOn = false;
+  if(input.nos && s.nos > 0 && car.nosLeft > 0 && throttle > 0){
+    car.nosOn = true;
+    car.nosLeft = Math.max(0, car.nosLeft - dt);
+  }
+
   /* ---- forward ---- */
   var drive = forceAt(s, Math.max(speed, 0), car.vMax) * throttle;
+  if(car.nosOn) drive *= 1 + s.nos;
   var resist = dragForce(s, speed) + rollingForce(s);
 
   var af = (drive - resist) / s.mass;
@@ -219,6 +233,7 @@ function stageDrag(cars, track){
     car.finished = false; car.finishTime = null;
     car.lapTimes = []; car.best = null; car.lapStart = 0;
     car.off = false; car.trap = 0; car.et = 0; car.launchAt = undefined;
+    car.nosLeft = car.stats.nosTime; car.nosOn = false;
   }
 }
 
@@ -361,11 +376,18 @@ function aiInput(car, track, cars){
      one organism and the same race is not identical every time. */
   var wob = (hash01(car.seed * 7.3 + Math.floor(G.t * 2.1)) - 0.5) * 0.1 * (2 - skill);
 
+  /* The AI spends its bottle where a driver would: already quick, going
+     straight, and not about to need the brakes. Without this, nitrous would
+     be a thing only the player has, which is the worst kind of upgrade. */
+  var useNos = s.nos > 0 && car.nosLeft > 0 && brake === 0 &&
+               worst < 0.009 && Math.abs(car.vf) > 18;
+
   return {
     throttle: clamp(throttle * (0.84 + skill * 0.16), 0, 1),
     brake: clamp(brake, 0, 1),
     steer: clamp(steer + wob, -1, 1),
-    hand: false
+    hand: false,
+    nos: useNos
   };
 }
 
@@ -398,6 +420,7 @@ function gridUp(cars, track){
     car.finished = false; car.finishTime = null;
     car.lapTimes = []; car.best = null; car.lapStart = 0;
     car.off = false;
+    car.nosLeft = car.stats.nosTime; car.nosOn = false;
   }
 }
 

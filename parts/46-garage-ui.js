@@ -173,7 +173,7 @@ function drawGarage(){
 
   /* One explicit button rather than buying on the row tap. Selecting a part
      shows what it would do to the car; a second, deliberate press is what
-     spends the money. A list where a mis-tap costs 38,000 credits is not a
+     spends the money. A list where a mis-tap costs $38,000 is not a
      shop, it is a trap - and on a phone there is no hover to preview with. */
   var selOwned = ownsPart(carKey, garageSlot, selTier);
   var selCost = slot.tiers[selTier].cost;
@@ -213,7 +213,7 @@ function drawGarage(){
       var res = action === 'fit'
         ? { ok: fitPart(SAVE.car, garageSlot, selTier) }
         : buyPart(SAVE.car, garageSlot, selTier);
-      if(!res.ok){ flash($('gSub'), 'Not enough credits for that one.'); return; }
+      if(!res.ok){ flash($('gSub'), 'Not enough money for that one.'); return; }
       garagePreview = null;
       drawGarage();
       refreshCarPreview();
@@ -239,7 +239,7 @@ function openShowroom(){
 
 function drawShowroom(){
   var html = '<p class="note2"><b style="color:var(--amber)">' + money(SAVE.credits) +
-             '</b> credits in hand.</p>';
+             '</b> in hand.</p>';
 
   for(var i = 0; i < CAR_ORDER.length; i++){
     var key = CAR_ORDER[i];
@@ -276,7 +276,7 @@ function drawShowroom(){
         saveNow();
       } else {
         var res = buyCar(key);
-        if(!res.ok){ flash($('showList'), 'Not enough credits.'); return; }
+        if(!res.ok){ flash($('showList'), 'Not enough money.'); return; }
       }
       drawShowroom();
       refreshCarPreview();
@@ -329,7 +329,42 @@ function drawPaint(){
           'that is what the aero in the garage is for.</div></div>' +
           '<span class="cost have">' + (l.spoiler ? 'On' : 'Off') + '</span></div>';
 
+  html += '<h2 style="font-size:22px;margin-top:16px">Body kit</h2><div id="kitRows">';
+  for(var kk = 0; kk < KITS.length; kk++){
+    html += '<div class="row' + (l.kit === kk ? ' on' : '') + '" data-k="kit" data-i="' + kk +
+            '"><div class="grow"><div class="t">' + KITS[kk].n + '</div></div>' +
+            '<span class="cost have">' + (l.kit === kk ? 'On' : 'Fit') + '</span></div>';
+  }
+  html += '</div>';
+
+  html += '<h2 style="font-size:22px;margin-top:16px">Wheel size</h2><div>';
+  for(var ws = 0; ws < WHEEL_SIZES.length; ws++){
+    html += '<div class="row' + (l.size === ws ? ' on' : '') + '" data-k="size" data-i="' + ws +
+            '"><div class="grow"><div class="t">' + WHEEL_SIZES[ws].n + '</div></div>' +
+            '<span class="cost have">' + (l.size === ws ? 'On' : 'Fit') + '</span></div>';
+  }
+  html += '</div>';
+
+  html += '<h2 style="font-size:22px;margin-top:16px">Numberplate</h2>' +
+          '<p class="note2" style="margin-bottom:8px">Eight characters, on the front ' +
+          'and the back. It follows you between cars rather than belonging to one.</p>' +
+          '<input id="plateIn" maxlength="8" value="' +
+          String(SAVE.plate || '').replace(/"/g, '&quot;') +
+          '" placeholder="BIGTURBO" style="width:100%;box-sizing:border-box;padding:11px 13px;' +
+          'font-family:var(--display);font-size:22px;letter-spacing:.12em;text-align:center;' +
+          'text-transform:uppercase;background:#e9e4d0;color:#14161a;border:2px solid var(--line);' +
+          'border-radius:10px">';
+
   $('paintBody').innerHTML = html;
+
+  var plateIn = $('plateIn');
+  if(plateIn){
+    plateIn.oninput = function(){
+      SAVE.plate = plateIn.value.toUpperCase().replace(/[^A-Z0-9 -]/g, '');
+      saveNow();
+      refreshCarPreview();
+    };
+  }
 
   Array.prototype.forEach.call($('paintBody').querySelectorAll('[data-k]'), function(el){
     el.onclick = function(){
@@ -356,7 +391,7 @@ function drawEvents(){
   var r = rating(statsOf(carKey));
   $('evSub').innerHTML = 'Driving the <b>' + CARS[carKey].name + '</b> — rating ' + r +
     ', class ' + classOf(r) + '. <b style="color:var(--amber)">' + money(SAVE.credits) +
-    '</b> credits.';
+    '</b>.';
 
   var html = '';
   for(var i = 0; i < EVENTS.length; i++){
@@ -384,18 +419,75 @@ function drawEvents(){
             '<span class="chip cls">' + (ev.max > 2000 ? 'Open' : 'Max ' + ev.max) + '</span>' +
             '</div></div>' + right + '</div>';
   }
+  /* ---- championships, under the one-off events ---- */
+  html += '<p class="sub" style="margin:22px 0 10px">Championships</p>';
+
+  for(var c = 0; c < CHAMPIONSHIPS.length; c++){
+    var ch = CHAMPIONSHIPS[c];
+    var st = champState(ch.id);
+    var chOpen = champOpen(c);
+    var chEligible = r <= ch.max;
+
+    var chRight;
+    if(!chOpen) chRight = '<span class="cost cant">Locked</span>';
+    else if(st.done) chRight = '<span class="cost" style="color:var(--green)">Done</span>';
+    else if(!chEligible) chRight = '<span class="cost cant">Over class</span>';
+    else chRight = '<span class="cost">' + money(ch.prize[0]) + '</span>';
+
+    /* The standings are the point of a season, so they are on the card, not
+       hidden behind it. */
+    var table = '';
+    if(st.round > 0){
+      var rows = champStandings(ch);
+      for(var q = 0; q < rows.length; q++){
+        table += '<span class="chip"' +
+                 (rows[q].name === 'You' ? ' style="color:var(--amber)"' : '') + '>' +
+                 rows[q].name + ' ' + rows[q].pts + '</span>';
+      }
+    }
+
+    html += '<div class="row' + (!chOpen || (!chEligible && !st.done) ? ' locked' : '') +
+            '" data-ch="' + c + '">' +
+            '<div class="grow"><div class="t">' + ch.name + '</div>' +
+            '<div class="d">' + ch.d + '</div>' +
+            '<div style="margin-top:6px">' +
+            '<span class="chip">Round ' + Math.min(st.round + 1, ch.rounds.length) +
+            ' of ' + ch.rounds.length + '</span>' +
+            '<span class="chip cls">' + (ch.max > 2000 ? 'Open' : 'Max ' + ch.max) + '</span>' +
+            table + '</div></div>' + chRight + '</div>';
+  }
+
   $('evList').innerHTML = html;
 
   Array.prototype.forEach.call($('evList').querySelectorAll('.row'), function(row){
-    var i = parseInt(row.getAttribute('data-ev'), 10);
+    var evi = row.getAttribute('data-ev');
+    var chi = row.getAttribute('data-ch');
+
+    if(evi !== null){
+      var i = parseInt(evi, 10);
+      row.onclick = function(){
+        var ev = EVENTS[i];
+        if(!eventOpen(i)){ flash($('evSub'), 'Finish the one before it first.'); return; }
+        if(rating(statsOf(SAVE.car)) > ev.max){
+          flash($('evSub'), 'Your car is over the class limit for this one.');
+          return;
+        }
+        openGrid(ev);
+      };
+      return;
+    }
+
+    var ci = parseInt(chi, 10);
     row.onclick = function(){
-      var ev = EVENTS[i];
-      if(!eventOpen(i)){ flash($('evSub'), 'Finish the one before it first.'); return; }
-      if(rating(statsOf(SAVE.car)) > ev.max){
-        flash($('evSub'), 'Your car is over the class limit for this one.');
+      var ch2 = CHAMPIONSHIPS[ci];
+      var st2 = champState(ch2.id);
+      if(!champOpen(ci)){ flash($('evSub'), 'Win the season before it first.'); return; }
+      if(st2.done){ flash($('evSub'), 'That season is already in the books.'); return; }
+      if(rating(statsOf(SAVE.car)) > ch2.max){
+        flash($('evSub'), 'Your car is over the class limit for this season.');
         return;
       }
-      openGrid(ev);
+      openGrid(champRound(ch2, st2.round));
     };
   });
 }
@@ -421,4 +513,63 @@ function openGrid(ev){
   $('gridNote').textContent = best
     ? 'Your best lap here: ' + fmtTime(best)
     : 'You have not set a lap here yet.';
+
+  renderWager(ev);
+}
+
+/* ---------------------------------------------------------------- the bet -- */
+
+/* The only way to lose money in the game. Prize money alone means your pile
+   only ever goes up, which makes every number on it meaningless after an
+   hour; a bet you can lose is what gives the rest of the economy weight.
+   It is still money won by driving - nothing here can be topped up, and the
+   stake is capped at what you are holding. */
+var WAGER_STEPS = [0, 2500, 10000, 40000, 150000];
+var wagerStake = 0;
+
+/* Longer odds for taking on a field that outclasses your car, because that
+   is the bet actually worth offering. */
+function wagerOdds(ev){
+  var mine = rating(statsOf(SAVE.car));
+  var theirs = fieldRating(ev);
+  var edge = theirs / Math.max(mine, 1);
+  return clamp(Math.round(edge * 20) / 10, 1.4, 4.0);
+}
+
+function fieldRating(ev){
+  var best = 0;
+  for(var i = 0; i < CAR_ORDER.length; i++){
+    var r = rating(carStats(CAR_ORDER[i], {}));
+    if(r <= ev.max && r > best) best = r;
+  }
+  return best || rating(statsOf(SAVE.car));
+}
+
+function renderWager(ev){
+  var odds = wagerOdds(ev);
+  if(wagerStake > SAVE.credits) wagerStake = 0;
+
+  $('wagerOdds').innerHTML = '&middot; win pays <b style="color:var(--amber)">' +
+    odds.toFixed(1) + 'x</b>';
+
+  var html = '';
+  for(var i = 0; i < WAGER_STEPS.length; i++){
+    var v = WAGER_STEPS[i];
+    if(v > SAVE.credits && v !== 0) continue;
+    html += '<button data-bet="' + v + '"' + (v === wagerStake ? ' class="on"' : '') +
+            '>' + (v === 0 ? 'No bet' : money(v)) + '</button>';
+  }
+  $('wagerBtns').innerHTML = html;
+  Array.prototype.forEach.call($('wagerBtns').children, function(b){
+    b.onclick = function(){
+      wagerStake = parseInt(b.getAttribute('data-bet'), 10) || 0;
+      renderWager(ev);
+    };
+  });
+
+  $('wagerNote').innerHTML = wagerStake === 0
+    ? 'Race for the prize money only.'
+    : 'Win and you take <b style="color:var(--green)">' +
+      money(Math.round(wagerStake * odds)) + '</b> on top. Finish anywhere else and ' +
+      'the <b style="color:var(--red)">' + money(wagerStake) + '</b> is gone.';
 }

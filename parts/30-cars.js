@@ -35,6 +35,20 @@ var BODIES = {
   hellsedan: { len: 5.10, wide: 1.90, ride: 0.27, hood: 0.52, roof: 0.74,
             cabF: -0.25, cabL: 2.10, nose: 0.66, tail: 0.52, wheel: 0.34, arch: 0.09 },
 
+  /* The rest of the showroom: a rotary coupe, a boxy AWD saloon, the Skyline,
+     a rear-engined thing with its mass in the wrong place, and a supercar
+     that is mostly windscreen and wheelbase. */
+  rx:     { len: 4.30, wide: 1.76, ride: 0.22, hood: 0.42, roof: 0.64,
+            cabF: -0.38, cabL: 1.48, nose: 0.74, tail: 0.44, wheel: 0.32, arch: 0.08 },
+  evo:    { len: 4.49, wide: 1.81, ride: 0.33, hood: 0.56, roof: 0.88,
+            cabF: -0.08, cabL: 1.98, nose: 0.50, tail: 0.40, wheel: 0.33, arch: 0.11 },
+  gtr:    { len: 4.60, wide: 1.79, ride: 0.27, hood: 0.50, roof: 0.76,
+            cabF: -0.22, cabL: 1.74, nose: 0.62, tail: 0.46, wheel: 0.34, arch: 0.10 },
+  rear:   { len: 4.29, wide: 1.78, ride: 0.24, hood: 0.44, roof: 0.70,
+            cabF: 0.10, cabL: 1.52, nose: 0.52, tail: 0.66, wheel: 0.33, arch: 0.12 },
+  super:  { len: 4.78, wide: 2.03, ride: 0.16, hood: 0.36, roof: 0.58,
+            cabF: 0.14, cabL: 1.30, nose: 0.86, tail: 0.60, wheel: 0.35, arch: 0.10 },
+
   /* Trucks. Tall, upright, and sitting on much larger wheels. The pickup
      carries a `bed`, which is the length of open cargo area behind its cab -
      the one piece of bodywork nothing else here has. */
@@ -127,11 +141,35 @@ function buildWheel(radius, width, rimColour){
    carStats - so the truck you see on the grid is the one the physics is
    driving, down to how far off the ground it is sitting. Bigger tyres come
    with it, because that is what a lift kit actually is. */
+/* A numberplate with whatever the player typed on it, drawn once into a
+   canvas and used as a texture. It is the only texture in the game, and it
+   is generated at runtime like everything else, so the file still has no
+   external references. */
+var PLATE_CACHE = {};
+function plateTexture(text){
+  var key = text || '';
+  if(PLATE_CACHE[key]) return PLATE_CACHE[key];
+  var c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  var g = c.getContext('2d');
+  g.fillStyle = '#e9e4d0'; g.fillRect(0, 0, 256, 64);
+  g.fillStyle = '#14161a';
+  g.font = 'bold 42px ui-monospace, Menlo, Consolas, monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(key.toUpperCase().slice(0, 8), 128, 34);
+  var t = new T.CanvasTexture(c);
+  PLATE_CACHE[key] = t;
+  return t;
+}
+
 function buildCar(carKey, looks, lift){
   var def = CARS[carKey];
   var b = BODIES[def.body] || BODIES.coupe;
   lift = lift || 0;
-  looks = looks || { paint: defaultPaint(carKey), wheel: 1, stripe: 0, spoiler: false };
+  looks = looks || { paint: defaultPaint(carKey), wheel: 1, stripe: 0, spoiler: false,
+                     kit: 0, size: 0 };
+  var kit = KITS[looks.kit || 0] || KITS[0];
+  var wsize = (WHEEL_SIZES[looks.size || 0] || WHEEL_SIZES[0]).d;
 
   var paint = (PAINTS[looks.paint] || PAINTS[0]).c;
   var rim = (WHEELS[looks.wheel] || WHEELS[1]).c;
@@ -180,6 +218,31 @@ function buildCar(carKey, looks, lift){
                  s * W * 0.31, b.hood * 0.66, -(L - b.nose - b.tail) / 2 - b.tail * 0.86));
   }
 
+  /* body kit: a front splitter and wider arches, both cosmetic */
+  if(kit.splitter > 0){
+    hull.add(box(W * 1.02, 0.05, kit.splitter, DARK,
+                 0, b.hood * 0.12, (L - b.nose - b.tail) / 2 + b.nose * 0.9));
+  }
+  if(kit.arch > 0){
+    for(var ka = -1; ka <= 1; ka += 2){
+      hull.add(box(kit.arch * 2, b.hood * 0.62, L * 0.62, paint,
+                   ka * (W / 2 + kit.arch * 0.5), b.hood * 0.42, 0));
+    }
+  }
+
+  /* numberplate, front and back */
+  if(looks.plate){
+    var pg = new T.PlaneGeometry(0.52, 0.13);
+    var pm = new T.MeshBasicMaterial({ map: plateTexture(looks.plate) });
+    var pf = new T.Mesh(pg, pm);
+    pf.position.set(0, b.hood * 0.32, (L - b.nose - b.tail) / 2 + b.nose * 0.96);
+    hull.add(pf);
+    var pb = new T.Mesh(pg, pm);
+    pb.position.set(0, b.hood * 0.34, -(L - b.nose - b.tail) / 2 - b.tail * 0.94);
+    pb.rotation.y = Math.PI;
+    hull.add(pb);
+  }
+
   /* a sill each side, to kill the floating-brick look */
   for(var s2 = -1; s2 <= 1; s2 += 2){
     hull.add(box(0.1, b.hood * 0.5, L * 0.56, DARK, s2 * W / 2, b.hood * 0.16, 0));
@@ -212,7 +275,7 @@ function buildCar(carKey, looks, lift){
   /* ------------------------------------------------------------ wheels -- */
 
   /* A lift goes on tyres as well as springs, so the wheels grow with it. */
-  var wr = b.wheel + lift * 0.42, ww = 0.26 + lift * 0.22;
+  var wr = b.wheel + lift * 0.42 + wsize, ww = 0.26 + lift * 0.22 + wsize * 0.5;
   var axleF = (L - b.nose - b.tail) / 2 - 0.18;
   var axleR = -(L - b.nose - b.tail) / 2 + 0.22;
   var halfTrack = W / 2 - ww / 2 + b.arch * 0.4;
@@ -231,8 +294,8 @@ function buildCar(carKey, looks, lift){
     if(i < 2) root.userData.steered.push(holder);
 
     /* arch over each wheel, so the body does not float above them */
-    hull.add(box(0.14, b.arch * 2, wr * 2.3, paint,
-                 side * (W / 2 - 0.02), b.hood * 0.9, z - b.ride - lift));
+    hull.add(box(0.14, (b.arch + kit.arch) * 2, wr * 2.3, paint,
+                 side * (W / 2 - 0.02 + kit.arch), b.hood * 0.9, z - b.ride - lift));
   }
 
   root.userData.paintMat = mat(paint);

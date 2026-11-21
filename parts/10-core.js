@@ -65,19 +65,22 @@ function fmtGap(s){
   if(s === null || s === undefined || !isFinite(s)) return '';
   return (s >= 0 ? '+' : '') + s.toFixed(1);
 }
-function money(n){ return Math.round(n).toLocaleString('en-US'); }
+function money(n){ return '$' + Math.round(Math.abs(n)).toLocaleString('en-US'); }
+/* Signed, for a wager that can go the other way. */
+function moneyDelta(n){ return (n < 0 ? '-' : '+') + money(n); }
 
 /* ------------------------------------------------------------------ input -- */
 
 var KEY = {};
-var INPUT = { throttle: 0, brake: 0, steer: 0, hand: false };
+var INPUT = { throttle: 0, brake: 0, steer: 0, hand: false, nos: false };
 
 var BINDS = {
   throttle: ['ArrowUp', 'KeyW'],
   brake:    ['ArrowDown', 'KeyS'],
   left:     ['ArrowLeft', 'KeyA'],
   right:    ['ArrowRight', 'KeyD'],
-  hand:     ['Space']
+  hand:     ['Space'],
+  nos:      ['ShiftLeft', 'ShiftRight', 'KeyN']
 };
 
 function anyDown(list){
@@ -134,13 +137,14 @@ function trigger(pad, i){
 }
 
 function gatherInput(){
-  var th = 0, br = 0, st = 0, hand = false;
+  var th = 0, br = 0, st = 0, hand = false, nos = false;
 
   if(anyDown(BINDS.throttle) || TOUCH.go) th = 1;
   if(anyDown(BINDS.brake) || TOUCH.brake) br = 1;
   if(anyDown(BINDS.left) || TOUCH.left) st -= 1;
   if(anyDown(BINDS.right) || TOUCH.right) st += 1;
   if(anyDown(BINDS.hand) || TOUCH.hand) hand = true;
+  if(anyDown(BINDS.nos) || TOUCH.nos) nos = true;
 
   var pad = readPad();
   if(pad){
@@ -149,6 +153,7 @@ function gatherInput(){
     if(pbr > br) br = pbr;
     if(pad.buttons[0] && pad.buttons[0].pressed) th = Math.max(th, 1);
     if(pad.buttons[1] && pad.buttons[1].pressed) hand = true;
+    if(pad.buttons[2] && pad.buttons[2].pressed) nos = true;
     var ax = axis(pad, 0);
     if(Math.abs(ax) > Math.abs(st)) st = ax;
     /* d-pad, for pads that report it as buttons 14/15 */
@@ -160,6 +165,7 @@ function gatherInput(){
   INPUT.brake = clamp(br, 0, 1);
   INPUT.steer = clamp(st, -1, 1);
   INPUT.hand = hand;
+  INPUT.nos = nos;
   return INPUT;
 }
 
@@ -178,6 +184,9 @@ function freshSave(){
     looks: {},                 // carKey -> {paint, wheel, spoiler, stripe}
     done: {},                  // eventId -> best position
     best: {},                  // trackKey -> best lap seconds
+    champ: {},                 // championship id -> { round, pts, done }
+    bestEt: {},                // car key -> best quarter mile
+    plate: '',                 // what it says on the numberplate
     seen: false
   };
 }

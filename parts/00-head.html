@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07070a">
-<meta name="description" content="Arcade racing with a garage. Earn credits, buy parts, and feel the car change.">
+<meta name="description" content="Arcade racing with a garage. Win money, buy parts, and feel the car change.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -41,6 +41,15 @@ body > canvas{display:block;position:fixed;inset:0;width:100%;height:100%;z-inde
 #tTime{top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));text-align:right;min-width:104px}
 #tTime .val{font-size:25px}
 #tTime .split{font-size:11px;font-family:var(--body);font-weight:700;margin-top:1px;height:13px}
+#wagerBox{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(0,0,0,.22)}
+#wagerBox .lbl{font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);font-weight:800;margin-bottom:8px}
+#wagerBox .btns{margin-top:0;gap:7px}
+#wagerBox button{flex:0 0 auto;min-width:0;padding:7px 13px;font-size:14px;
+  font-family:var(--display);background:var(--panel2);color:var(--ink);
+  border:1px solid var(--line);border-radius:9px;cursor:pointer}
+#wagerBox button.on{background:var(--amber);color:#1b1405;border-color:var(--amber)}
 /* The three tiles are pinned left, centre and right, so on a narrow phone a
    long middle value ('To go 268 m') grew into the clock. Shrink them rather
    than let them overlap. */
@@ -107,6 +116,18 @@ body > canvas{display:block;position:fixed;inset:0;width:100%;height:100%;z-inde
 #padG:active,#padG.hit{background:rgba(62,201,138,.26);border-color:var(--green)}
 #padH{right:calc(18px + env(safe-area-inset-right));
   bottom:calc(132px + env(safe-area-inset-bottom));width:66px;height:66px;font-size:13px}
+/* Only shown when the car actually has a bottle fitted. */
+#padN{right:calc(94px + env(safe-area-inset-right));
+  bottom:calc(132px + env(safe-area-inset-bottom));width:66px;height:66px;font-size:13px;
+  display:none}
+#padN.armed{display:grid}
+#padN:active,#padN.hit{background:rgba(74,158,255,.3);border-color:var(--blue)}
+/* Inside the dash, above the speed, so it flows with it instead of being
+   pinned somewhere it can land on top of the number. */
+#nos{width:188px;height:7px;background:rgba(255,255,255,.12);border:1px solid var(--line);
+  border-radius:4px;overflow:hidden;display:none;margin:0 0 7px auto}
+#nos.on{display:block}
+#nosFill{height:100%;width:0%;background:var(--blue);border-radius:4px}
 
 /* ------------------------------------------------------------ overlays -- */
 .ov{position:fixed;inset:0;background:rgba(5,6,9,.9);backdrop-filter:blur(9px);
@@ -212,6 +233,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <div class="split" id="vSplit"></div></div>
   <div id="gear">1</div>
   <div id="dash">
+    <div id="nos"><div id="nosFill"></div></div>
     <div id="spd">0</div>
     <div id="spdU">mph</div>
     <div id="revwrap"><div id="rev"></div></div>
@@ -226,6 +248,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
   <div class="pad" id="padH">HAND</div>
   <div class="pad" id="padB">BRAKE</div>
   <div class="pad" id="padG">GO</div>
+  <div class="pad" id="padN">NOS</div>
 </div>
 
 <!-- menu -->
@@ -233,8 +256,8 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
   <div class="card">
     <h1>BIG<em>TURBOS</em></h1>
     <p class="sub" style="text-align:center">Arcade racing with a garage that matters.
-      Win credits, buy parts, feel the car change underneath you.</p>
-    <div id="wallet"><span>Credits</span><b id="vCredits">0</b></div>
+      Win money, buy parts, feel the car change underneath you.</p>
+    <div id="wallet"><span>In hand</span><b id="vCredits">$0</b></div>
     <div class="btns">
       <button class="go" id="btnCareer">Career</button>
       <button class="go alt" id="btnQuick">Quick race</button>
@@ -304,6 +327,11 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <h2 id="gridName">Race</h2>
     <p class="sub" id="gridSub"></p>
     <div class="stats" id="gridStats"></div>
+    <div id="wagerBox">
+      <div class="lbl">Side bet <span id="wagerOdds"></span></div>
+      <div class="btns" id="wagerBtns"></div>
+      <p class="note2" id="wagerNote"></p>
+    </div>
     <p class="note2" id="gridNote"></p>
     <div class="btns">
       <button class="go" id="btnGo">Drop the flag</button>

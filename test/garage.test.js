@@ -6,15 +6,18 @@ const H = require('./harness');
 
 const core = H.read('10-core.js');
 const gar = H.read('45-garage.js');
+const trk = H.read('20-track.js');
 
 const ctx = H.makeContext({ MPS_TO_MPH: 2.23694 });
 H.run(ctx, H.grab(core, ['clamp', 'lerp', 'sign']));
-H.run(ctx, 'var SAVE = {parts:{}, looks:{}, owned:["hatch"], credits:0, done:{}};');
+H.run(ctx, 'var SAVE = {parts:{}, looks:{}, owned:["hatch"], credits:0, done:{}, champ:{}};');
+H.run(ctx, H.grabVar(trk, ['TRACKS']));
 H.run(ctx, 'function saveNow(){}');
-H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'PAINTS', 'WHEELS', 'STRIPES', 'EVENTS', 'CLASSES']));
+H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'CHAMPIONSHIPS', 'CHAMP_POINTS', 'KITS', 'WHEEL_SIZES', 'PAINTS', 'WHEELS', 'STRIPES', 'EVENTS', 'CLASSES']));
 H.run(ctx, 'var GRAV = 9.81, RHO = 1.225, POWER_USE = 0.55, TRACTION = 0.85;');
 H.run(ctx, H.grab(gar, [
   'isTruck', 'slotFits', 'slotsFor',
+  'champById', 'champState', 'champOpen', 'champRound', 'awardChampPoints', 'champStandings',
   'slotByKey', 'partsFor', 'tierOf', 'carStats', 'statsOf', 'rollingForce',
   'driveForce', 'tractionLimit', 'dragForce', 'dragLimited', 'topSpeed',
   'forceAt', 'zeroTo60', 'gripAt', 'rating', 'classOf', 'summary',
@@ -195,5 +198,90 @@ for(const ev of ctx.EVENTS){
   if(!any) reachable = false;
 }
 H.ok(reachable, 'every event has at least one car that can legally enter it');
+
+/* ------------------------------------------------- the newer parts -- */
+
+console.log('\n  differential, clutch and nitrous');
+{
+  const open = carStats('gtr', {});
+  const spool = carStats('gtr', { diff: 3 });
+  H.ok(ctx.tractionLimit(spool) > ctx.tractionLimit(open),
+       'a spool puts more power down');
+  H.ok(spool.steer < open.steer,
+       'and gives away steering to do it',
+       open.steer.toFixed(2) + ' -> ' + spool.steer.toFixed(2));
+
+  const stockC = carStats('muscle', {});
+  const carbon = carStats('muscle', { clutch: 3 });
+  H.ok(ctx.zeroTo60(carbon) < ctx.zeroTo60(stockC),
+       'a race clutch is worth 0-60',
+       ctx.zeroTo60(stockC).toFixed(2) + 's -> ' + ctx.zeroTo60(carbon).toFixed(2) + 's');
+  H.ok(Math.abs(ctx.topSpeed(carbon) - ctx.topSpeed(stockC)) < 0.6,
+       'and does nothing at all for top speed');
+
+  /* The bottle is a budget: capacity is finite, and the weight is not. */
+  const dry = carStats('a90', {});
+  const wet = carStats('a90', { nos: 3 });
+  H.ok(wet.nos > 0 && wet.nosTime > 0, 'nitrous gives both a shot and a clock',
+       '+' + Math.round(wet.nos * 100) + '% for ' + wet.nosTime + 's');
+  H.ok(wet.mass > dry.mass, 'and the bottle is carried whether you use it or not',
+       dry.mass + ' -> ' + wet.mass + ' kg');
+  H.ok(Math.abs(ctx.topSpeed(wet) - ctx.topSpeed(dry)) < 1.2,
+       'nitrous is not simply more top speed');
+}
+
+/* --------------------------------------------------- looks are free -- */
+
+console.log('\n  the looks change nothing');
+{
+  const plain = carStats('rx', {});
+  for(let k = 0; k < ctx.KITS.length; k++){
+    /* Looks live in SAVE.looks, not in parts, so carStats cannot see them at
+       all - this is the test that keeps it that way. */
+    const keys = Object.keys(plain);
+    const same = keys.every(key => Math.abs(plain[key] - carStats('rx', {})[key]) < 1e-9);
+    H.ok(same, 'body kit ' + ctx.KITS[k].n + ' leaves the car untouched');
+  }
+}
+
+/* --------------------------------------------------- championships -- */
+
+console.log('\n  the championships');
+{
+  for(const ch of ctx.CHAMPIONSHIPS){
+    H.ok(ch.rounds.length >= 3, ch.name + ' is a season, not a race',
+         ch.rounds.length + ' rounds');
+    H.ok(ch.rivals.length >= 2 && ch.rivals.every(r => ctx.CARS[r.car]),
+         'and its rivals all drive cars that exist');
+  }
+
+  /* Only the first is open until one is won. */
+  ctx.SAVE.champ = {};
+  H.ok(ctx.champOpen(0) === true, 'the first season is open from the start');
+  H.ok(ctx.champOpen(1) === false, 'and the second is not');
+
+  /* Run a whole season, winning every round. */
+  const ch = ctx.CHAMPIONSHIPS[0];
+  const names = ['You'].concat(ch.rivals.map(r => r.name));
+  for(let n = 0; n < ch.rounds.length; n++){
+    const ev = ctx.champRound(ch, n);
+    H.ok(!!ctx.TRACKS[ev.track], 'round ' + (n + 1) + ' runs on a track that exists');
+    ctx.awardChampPoints(ch, names);
+  }
+  const st = ctx.champState(ch.id);
+  H.ok(st.done === true, 'four rounds finishes the season');
+  H.ok(ctx.champOpen(1) === true, 'and that opens the next one');
+
+  const table = ctx.champStandings(ch);
+  H.ok(table[0].name === 'You' && table[0].pts === ctx.CHAMP_POINTS[0] * ch.rounds.length,
+       'winning every round tops the table', table[0].pts + ' points');
+  H.ok(table[table.length - 1].pts < table[0].pts, 'and the table is actually sorted');
+
+  /* Points per round are fixed, so a season total cannot drift. */
+  const total = table.reduce((a, b) => a + b.pts, 0);
+  const perRound = ctx.CHAMP_POINTS.slice(0, names.length).reduce((a, b) => a + b, 0);
+  H.ok(total === perRound * ch.rounds.length,
+       'every round hands out the same points', total + ' across the season');
+}
 
 H.done();

@@ -48,6 +48,19 @@ function assemble(){
     return fs.readFileSync(file, 'utf8');
   }).join('');
 
+  /* Parse the assembled script before writing it. The tests lift individual
+     functions out of the parts, so a syntax error in a file they never pull
+     from - the garage UI, say - sails past every one of them and shows up
+     only as a blank page in a browser. One stray apostrophe did exactly
+     that, so the build now refuses to write a file it cannot parse. */
+  try {
+    new (require('vm').Script)(body);
+  } catch(e){
+    console.error('SYNTAX ERROR in the assembled script, nothing written:');
+    console.error('  ' + e.message);
+    process.exit(1);
+  }
+
   const html = head + body + '</script>\n</body>\n</html>\n';
   fs.writeFileSync(path.join(DIR, 'index.html'), html);
 

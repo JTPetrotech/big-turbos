@@ -323,6 +323,54 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
        Math.hypot(pair[0].x - pair[1].x, pair[0].z - pair[1].z).toFixed(1) + ' m apart');
 }
 
+/* ------------------------------------------------------------ nitrous -- */
+
+{
+  console.log('\n  nitrous');
+  const strip2 = ctx.buildTrack('strip');
+
+  const run = (parts, holdNos) => {
+    const c = ctx.makeCar('a90', parts);
+    ctx.stageDrag([c], strip2);
+    let t = 0;
+    while(c.along < 402.336 && t < 60){
+      ctx.stepCar(c, strip2, { throttle: 1, brake: 0, steer: 0, hand: false,
+                               nos: holdNos }, DT);
+      t += DT;
+    }
+    return { et: t, left: c.nosLeft };
+  };
+
+  const plain = run({}, false);
+  const armedUnused = run({ nos: 2 }, false);
+  const armedUsed = run({ nos: 2 }, true);
+
+  H.ok(armedUsed.et < plain.et, 'nitrous is worth real time down the strip',
+       plain.et.toFixed(2) + 's -> ' + armedUsed.et.toFixed(2) + 's');
+
+  /* The trade: fitted and never pressed, you are only carrying the bottle. */
+  H.ok(armedUnused.et > plain.et,
+       'but carrying it and not using it makes you slower',
+       plain.et.toFixed(2) + 's -> ' + armedUnused.et.toFixed(2) + 's');
+
+  /* It is a budget, and the budget runs out. */
+  H.ok(armedUsed.left < 0.001, 'holding it empties the bottle',
+       armedUsed.left.toFixed(2) + 's left');
+  H.ok(armedUnused.left > 6, 'and not holding it spends nothing',
+       armedUnused.left.toFixed(1) + 's left');
+
+  /* Off the throttle it does nothing, so it cannot be used as a brake-saver. */
+  const coast = ctx.makeCar('a90', { nos: 2 });
+  ctx.stageDrag([coast], strip2);
+  coast.vf = 30;
+  for(let i = 0; i < 60; i++){
+    ctx.stepCar(coast, strip2, { throttle: 0, brake: 0, steer: 0, hand: false,
+                                 nos: true }, DT);
+  }
+  H.ok(Math.abs(coast.nosLeft - coast.stats.nosTime) < 1e-6,
+       'and off the throttle it does not spend itself');
+}
+
 /* --------------------------------------------------------- free roam -- */
 
 {

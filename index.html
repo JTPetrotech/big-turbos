@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07070a">
-<meta name="description" content="Arcade racing with a garage. Earn credits, buy parts, and feel the car change.">
+<meta name="description" content="Arcade racing with a garage. Win money, buy parts, and feel the car change.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -44,6 +44,15 @@ body > canvas{display:block;position:fixed;inset:0;width:100%;height:100%;z-inde
 #tTime{top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));text-align:right;min-width:104px}
 #tTime .val{font-size:25px}
 #tTime .split{font-size:11px;font-family:var(--body);font-weight:700;margin-top:1px;height:13px}
+#wagerBox{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(0,0,0,.22)}
+#wagerBox .lbl{font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);font-weight:800;margin-bottom:8px}
+#wagerBox .btns{margin-top:0;gap:7px}
+#wagerBox button{flex:0 0 auto;min-width:0;padding:7px 13px;font-size:14px;
+  font-family:var(--display);background:var(--panel2);color:var(--ink);
+  border:1px solid var(--line);border-radius:9px;cursor:pointer}
+#wagerBox button.on{background:var(--amber);color:#1b1405;border-color:var(--amber)}
 /* The three tiles are pinned left, centre and right, so on a narrow phone a
    long middle value ('To go 268 m') grew into the clock. Shrink them rather
    than let them overlap. */
@@ -110,6 +119,18 @@ body > canvas{display:block;position:fixed;inset:0;width:100%;height:100%;z-inde
 #padG:active,#padG.hit{background:rgba(62,201,138,.26);border-color:var(--green)}
 #padH{right:calc(18px + env(safe-area-inset-right));
   bottom:calc(132px + env(safe-area-inset-bottom));width:66px;height:66px;font-size:13px}
+/* Only shown when the car actually has a bottle fitted. */
+#padN{right:calc(94px + env(safe-area-inset-right));
+  bottom:calc(132px + env(safe-area-inset-bottom));width:66px;height:66px;font-size:13px;
+  display:none}
+#padN.armed{display:grid}
+#padN:active,#padN.hit{background:rgba(74,158,255,.3);border-color:var(--blue)}
+/* Inside the dash, above the speed, so it flows with it instead of being
+   pinned somewhere it can land on top of the number. */
+#nos{width:188px;height:7px;background:rgba(255,255,255,.12);border:1px solid var(--line);
+  border-radius:4px;overflow:hidden;display:none;margin:0 0 7px auto}
+#nos.on{display:block}
+#nosFill{height:100%;width:0%;background:var(--blue);border-radius:4px}
 
 /* ------------------------------------------------------------ overlays -- */
 .ov{position:fixed;inset:0;background:rgba(5,6,9,.9);backdrop-filter:blur(9px);
@@ -215,6 +236,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <div class="split" id="vSplit"></div></div>
   <div id="gear">1</div>
   <div id="dash">
+    <div id="nos"><div id="nosFill"></div></div>
     <div id="spd">0</div>
     <div id="spdU">mph</div>
     <div id="revwrap"><div id="rev"></div></div>
@@ -229,6 +251,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
   <div class="pad" id="padH">HAND</div>
   <div class="pad" id="padB">BRAKE</div>
   <div class="pad" id="padG">GO</div>
+  <div class="pad" id="padN">NOS</div>
 </div>
 
 <!-- menu -->
@@ -236,8 +259,8 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
   <div class="card">
     <h1>BIG<em>TURBOS</em></h1>
     <p class="sub" style="text-align:center">Arcade racing with a garage that matters.
-      Win credits, buy parts, feel the car change underneath you.</p>
-    <div id="wallet"><span>Credits</span><b id="vCredits">0</b></div>
+      Win money, buy parts, feel the car change underneath you.</p>
+    <div id="wallet"><span>In hand</span><b id="vCredits">$0</b></div>
     <div class="btns">
       <button class="go" id="btnCareer">Career</button>
       <button class="go alt" id="btnQuick">Quick race</button>
@@ -307,6 +330,11 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <h2 id="gridName">Race</h2>
     <p class="sub" id="gridSub"></p>
     <div class="stats" id="gridStats"></div>
+    <div id="wagerBox">
+      <div class="lbl">Side bet <span id="wagerOdds"></span></div>
+      <div class="btns" id="wagerBtns"></div>
+      <p class="note2" id="wagerNote"></p>
+    </div>
     <p class="note2" id="gridNote"></p>
     <div class="btns">
       <button class="go" id="btnGo">Drop the flag</button>
@@ -431,19 +459,22 @@ function fmtGap(s){
   if(s === null || s === undefined || !isFinite(s)) return '';
   return (s >= 0 ? '+' : '') + s.toFixed(1);
 }
-function money(n){ return Math.round(n).toLocaleString('en-US'); }
+function money(n){ return '$' + Math.round(Math.abs(n)).toLocaleString('en-US'); }
+/* Signed, for a wager that can go the other way. */
+function moneyDelta(n){ return (n < 0 ? '-' : '+') + money(n); }
 
 /* ------------------------------------------------------------------ input -- */
 
 var KEY = {};
-var INPUT = { throttle: 0, brake: 0, steer: 0, hand: false };
+var INPUT = { throttle: 0, brake: 0, steer: 0, hand: false, nos: false };
 
 var BINDS = {
   throttle: ['ArrowUp', 'KeyW'],
   brake:    ['ArrowDown', 'KeyS'],
   left:     ['ArrowLeft', 'KeyA'],
   right:    ['ArrowRight', 'KeyD'],
-  hand:     ['Space']
+  hand:     ['Space'],
+  nos:      ['ShiftLeft', 'ShiftRight', 'KeyN']
 };
 
 function anyDown(list){
@@ -500,13 +531,14 @@ function trigger(pad, i){
 }
 
 function gatherInput(){
-  var th = 0, br = 0, st = 0, hand = false;
+  var th = 0, br = 0, st = 0, hand = false, nos = false;
 
   if(anyDown(BINDS.throttle) || TOUCH.go) th = 1;
   if(anyDown(BINDS.brake) || TOUCH.brake) br = 1;
   if(anyDown(BINDS.left) || TOUCH.left) st -= 1;
   if(anyDown(BINDS.right) || TOUCH.right) st += 1;
   if(anyDown(BINDS.hand) || TOUCH.hand) hand = true;
+  if(anyDown(BINDS.nos) || TOUCH.nos) nos = true;
 
   var pad = readPad();
   if(pad){
@@ -515,6 +547,7 @@ function gatherInput(){
     if(pbr > br) br = pbr;
     if(pad.buttons[0] && pad.buttons[0].pressed) th = Math.max(th, 1);
     if(pad.buttons[1] && pad.buttons[1].pressed) hand = true;
+    if(pad.buttons[2] && pad.buttons[2].pressed) nos = true;
     var ax = axis(pad, 0);
     if(Math.abs(ax) > Math.abs(st)) st = ax;
     /* d-pad, for pads that report it as buttons 14/15 */
@@ -526,6 +559,7 @@ function gatherInput(){
   INPUT.brake = clamp(br, 0, 1);
   INPUT.steer = clamp(st, -1, 1);
   INPUT.hand = hand;
+  INPUT.nos = nos;
   return INPUT;
 }
 
@@ -544,6 +578,9 @@ function freshSave(){
     looks: {},                 // carKey -> {paint, wheel, spoiler, stripe}
     done: {},                  // eventId -> best position
     best: {},                  // trackKey -> best lap seconds
+    champ: {},                 // championship id -> { round, pts, done }
+    bestEt: {},                // car key -> best quarter mile
+    plate: '',                 // what it says on the numberplate
     seen: false
   };
 }
@@ -1007,6 +1044,20 @@ var BODIES = {
   hellsedan: { len: 5.10, wide: 1.90, ride: 0.27, hood: 0.52, roof: 0.74,
             cabF: -0.25, cabL: 2.10, nose: 0.66, tail: 0.52, wheel: 0.34, arch: 0.09 },
 
+  /* The rest of the showroom: a rotary coupe, a boxy AWD saloon, the Skyline,
+     a rear-engined thing with its mass in the wrong place, and a supercar
+     that is mostly windscreen and wheelbase. */
+  rx:     { len: 4.30, wide: 1.76, ride: 0.22, hood: 0.42, roof: 0.64,
+            cabF: -0.38, cabL: 1.48, nose: 0.74, tail: 0.44, wheel: 0.32, arch: 0.08 },
+  evo:    { len: 4.49, wide: 1.81, ride: 0.33, hood: 0.56, roof: 0.88,
+            cabF: -0.08, cabL: 1.98, nose: 0.50, tail: 0.40, wheel: 0.33, arch: 0.11 },
+  gtr:    { len: 4.60, wide: 1.79, ride: 0.27, hood: 0.50, roof: 0.76,
+            cabF: -0.22, cabL: 1.74, nose: 0.62, tail: 0.46, wheel: 0.34, arch: 0.10 },
+  rear:   { len: 4.29, wide: 1.78, ride: 0.24, hood: 0.44, roof: 0.70,
+            cabF: 0.10, cabL: 1.52, nose: 0.52, tail: 0.66, wheel: 0.33, arch: 0.12 },
+  super:  { len: 4.78, wide: 2.03, ride: 0.16, hood: 0.36, roof: 0.58,
+            cabF: 0.14, cabL: 1.30, nose: 0.86, tail: 0.60, wheel: 0.35, arch: 0.10 },
+
   /* Trucks. Tall, upright, and sitting on much larger wheels. The pickup
      carries a `bed`, which is the length of open cargo area behind its cab -
      the one piece of bodywork nothing else here has. */
@@ -1099,11 +1150,35 @@ function buildWheel(radius, width, rimColour){
    carStats - so the truck you see on the grid is the one the physics is
    driving, down to how far off the ground it is sitting. Bigger tyres come
    with it, because that is what a lift kit actually is. */
+/* A numberplate with whatever the player typed on it, drawn once into a
+   canvas and used as a texture. It is the only texture in the game, and it
+   is generated at runtime like everything else, so the file still has no
+   external references. */
+var PLATE_CACHE = {};
+function plateTexture(text){
+  var key = text || '';
+  if(PLATE_CACHE[key]) return PLATE_CACHE[key];
+  var c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  var g = c.getContext('2d');
+  g.fillStyle = '#e9e4d0'; g.fillRect(0, 0, 256, 64);
+  g.fillStyle = '#14161a';
+  g.font = 'bold 42px ui-monospace, Menlo, Consolas, monospace';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(key.toUpperCase().slice(0, 8), 128, 34);
+  var t = new T.CanvasTexture(c);
+  PLATE_CACHE[key] = t;
+  return t;
+}
+
 function buildCar(carKey, looks, lift){
   var def = CARS[carKey];
   var b = BODIES[def.body] || BODIES.coupe;
   lift = lift || 0;
-  looks = looks || { paint: defaultPaint(carKey), wheel: 1, stripe: 0, spoiler: false };
+  looks = looks || { paint: defaultPaint(carKey), wheel: 1, stripe: 0, spoiler: false,
+                     kit: 0, size: 0 };
+  var kit = KITS[looks.kit || 0] || KITS[0];
+  var wsize = (WHEEL_SIZES[looks.size || 0] || WHEEL_SIZES[0]).d;
 
   var paint = (PAINTS[looks.paint] || PAINTS[0]).c;
   var rim = (WHEELS[looks.wheel] || WHEELS[1]).c;
@@ -1152,6 +1227,31 @@ function buildCar(carKey, looks, lift){
                  s * W * 0.31, b.hood * 0.66, -(L - b.nose - b.tail) / 2 - b.tail * 0.86));
   }
 
+  /* body kit: a front splitter and wider arches, both cosmetic */
+  if(kit.splitter > 0){
+    hull.add(box(W * 1.02, 0.05, kit.splitter, DARK,
+                 0, b.hood * 0.12, (L - b.nose - b.tail) / 2 + b.nose * 0.9));
+  }
+  if(kit.arch > 0){
+    for(var ka = -1; ka <= 1; ka += 2){
+      hull.add(box(kit.arch * 2, b.hood * 0.62, L * 0.62, paint,
+                   ka * (W / 2 + kit.arch * 0.5), b.hood * 0.42, 0));
+    }
+  }
+
+  /* numberplate, front and back */
+  if(looks.plate){
+    var pg = new T.PlaneGeometry(0.52, 0.13);
+    var pm = new T.MeshBasicMaterial({ map: plateTexture(looks.plate) });
+    var pf = new T.Mesh(pg, pm);
+    pf.position.set(0, b.hood * 0.32, (L - b.nose - b.tail) / 2 + b.nose * 0.96);
+    hull.add(pf);
+    var pb = new T.Mesh(pg, pm);
+    pb.position.set(0, b.hood * 0.34, -(L - b.nose - b.tail) / 2 - b.tail * 0.94);
+    pb.rotation.y = Math.PI;
+    hull.add(pb);
+  }
+
   /* a sill each side, to kill the floating-brick look */
   for(var s2 = -1; s2 <= 1; s2 += 2){
     hull.add(box(0.1, b.hood * 0.5, L * 0.56, DARK, s2 * W / 2, b.hood * 0.16, 0));
@@ -1184,7 +1284,7 @@ function buildCar(carKey, looks, lift){
   /* ------------------------------------------------------------ wheels -- */
 
   /* A lift goes on tyres as well as springs, so the wheels grow with it. */
-  var wr = b.wheel + lift * 0.42, ww = 0.26 + lift * 0.22;
+  var wr = b.wheel + lift * 0.42 + wsize, ww = 0.26 + lift * 0.22 + wsize * 0.5;
   var axleF = (L - b.nose - b.tail) / 2 - 0.18;
   var axleR = -(L - b.nose - b.tail) / 2 + 0.22;
   var halfTrack = W / 2 - ww / 2 + b.arch * 0.4;
@@ -1203,8 +1303,8 @@ function buildCar(carKey, looks, lift){
     if(i < 2) root.userData.steered.push(holder);
 
     /* arch over each wheel, so the body does not float above them */
-    hull.add(box(0.14, b.arch * 2, wr * 2.3, paint,
-                 side * (W / 2 - 0.02), b.hood * 0.9, z - b.ride - lift));
+    hull.add(box(0.14, (b.arch + kit.arch) * 2, wr * 2.3, paint,
+                 side * (W / 2 - 0.02 + kit.arch), b.hood * 0.9, z - b.ride - lift));
   }
 
   root.userData.paintMat = mat(paint);
@@ -1258,6 +1358,7 @@ function makeCar(carKey, parts, opts){
 
     lap: 0, along: 0, lastAlong: 0, hint: null, progress: 0,
     lateral: 0, off: false,
+    nosLeft: stats.nosTime, nosOn: false,
 
     ai: !!opts.ai,
     skill: opts.skill === undefined ? 1 : opts.skill,
@@ -1297,8 +1398,21 @@ function stepCar(car, track, input, dt){
   if(hand) grip *= 0.42;               // handbrake: deliberately break traction
   var gripForce = grip * s.mass * GRAV;
 
+  /* ---- nitrous ---- */
+  /* A bottle is a budget, not a button: holding it spends seconds you do not
+     get back until the next race, and it does nothing off the throttle. The
+     weight it adds is carried for the whole race whether you use it or not,
+     which is the trade - a lap you never press it is a lap you were heavier
+     for nothing. */
+  car.nosOn = false;
+  if(input.nos && s.nos > 0 && car.nosLeft > 0 && throttle > 0){
+    car.nosOn = true;
+    car.nosLeft = Math.max(0, car.nosLeft - dt);
+  }
+
   /* ---- forward ---- */
   var drive = forceAt(s, Math.max(speed, 0), car.vMax) * throttle;
+  if(car.nosOn) drive *= 1 + s.nos;
   var resist = dragForce(s, speed) + rollingForce(s);
 
   var af = (drive - resist) / s.mass;
@@ -1441,6 +1555,7 @@ function stageDrag(cars, track){
     car.finished = false; car.finishTime = null;
     car.lapTimes = []; car.best = null; car.lapStart = 0;
     car.off = false; car.trap = 0; car.et = 0; car.launchAt = undefined;
+    car.nosLeft = car.stats.nosTime; car.nosOn = false;
   }
 }
 
@@ -1583,11 +1698,18 @@ function aiInput(car, track, cars){
      one organism and the same race is not identical every time. */
   var wob = (hash01(car.seed * 7.3 + Math.floor(G.t * 2.1)) - 0.5) * 0.1 * (2 - skill);
 
+  /* The AI spends its bottle where a driver would: already quick, going
+     straight, and not about to need the brakes. Without this, nitrous would
+     be a thing only the player has, which is the worst kind of upgrade. */
+  var useNos = s.nos > 0 && car.nosLeft > 0 && brake === 0 &&
+               worst < 0.009 && Math.abs(car.vf) > 18;
+
   return {
     throttle: clamp(throttle * (0.84 + skill * 0.16), 0, 1),
     brake: clamp(brake, 0, 1),
     steer: clamp(steer + wob, -1, 1),
-    hand: false
+    hand: false,
+    nos: useNos
   };
 }
 
@@ -1620,6 +1742,7 @@ function gridUp(cars, track){
     car.finished = false; car.finishTime = null;
     car.lapTimes = []; car.best = null; car.lapStart = 0;
     car.off = false;
+    car.nosLeft = car.stats.nosTime; car.nosOn = false;
   }
 }
 
@@ -1653,7 +1776,7 @@ function positionOf(cars, car){
       a stripped shell is quick and nervous. A shopping list with an obvious
       right answer is not a garage, it is a queue.
 
-   2. Nothing costs real money, ever. Credits come from driving. There is no
+   2. Nothing costs real money, ever. The money comes from driving. There is no
       shop, no currency, no ads, and nothing that can be bought with a card.
    ========================================================================= */
 
@@ -1740,6 +1863,40 @@ var CARS = {
     price: 104000, mass: 2470, power: 529, grip: 0.95, brake: 9.8, steer: 1.75, cda: 1.08,
     body: 'suv', colour: 0x2a6e4a
   },
+  rx: {
+    name: 'Kaido 13B', nick: 'The rotary',
+    desc: 'A rotary, so it revs past where everything else has given up. Light, delicate, and allergic to neglect.',
+    price: 64000, mass: 1280, power: 188, grip: 1.22, brake: 11.2, steer: 2.60, cda: 0.62,
+    boost: 0.15, lag: 11, stability: 0.96,
+    body: 'rx', colour: 0xf2e9d8
+  },
+  evo: {
+    name: 'Lancet RS', nick: 'The Evo',
+    desc: 'Four driven wheels and a turbo, in a shell with no interior worth mentioning. It simply goes where you point it.',
+    price: 84000, mass: 1410, power: 206, grip: 1.34, brake: 11.8, steer: 2.65, cda: 0.74,
+    boost: 0.18, lag: 9,
+    body: 'evo', colour: 0xe8e8ea
+  },
+  gtr: {
+    name: 'Nakagawa R34', nick: 'The Skyline',
+    desc: 'Twin turbos, all-wheel drive and more computers than the rest of this showroom combined. Heavy, and it never once feels it.',
+    price: 88000, mass: 1560, power: 206, grip: 1.32, brake: 11.6, steer: 2.45, cda: 0.68,
+    boost: 0.17, lag: 10,
+    body: 'gtr', colour: 0x5aa8e8
+  },
+  rear: {
+    name: 'Pelican 930', nick: 'The widowmaker',
+    desc: 'Engine behind the back axle and a turbo that arrives all at once at 36 mph. Quick, and it has opinions about lifting mid-corner.',
+    price: 128000, mass: 1470, power: 283, grip: 1.30, brake: 11.9, steer: 2.50, cda: 0.60,
+    boost: 0.22, lag: 16, stability: 0.88,
+    body: 'rear', colour: 0xf2d04a
+  },
+  super: {
+    name: 'Toro SV', nick: 'The supercar',
+    desc: 'Mid-engined, naturally aspirated and completely impractical. The fastest thing here that still has a numberplate.',
+    price: 140000, mass: 1525, power: 471, grip: 1.38, brake: 12.6, steer: 2.60, cda: 0.64,
+    body: 'super', colour: 0x8ad83c
+  },
   trx: {
     name: 'Warhawk TRX', nick: 'The truck',
     desc: 'Supercharged pickup on knobbly tyres. Hopeless in a corner, hilarious everywhere else, and it does not care about grass.',
@@ -1760,8 +1917,9 @@ function isTruck(carKey){
 /* Showroom order, and the order the AI picks from. Sorted by rating, which
    the tests enforce - a showroom that is not in order is a showroom that
    lies about which car is the step up. */
-var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'muscle', 'rally',
-                 'hellwagon', 'a90', 'hellsedan', 'hellcoupe', 'proto'];
+var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'gtr', 'rx', 'muscle', 'evo',
+                 'rally', 'hellwagon', 'a90', 'rear', 'hellsedan', 'hellcoupe',
+                 'super', 'proto'];
 
 /* ----------------------------------------------------------------- parts -- */
 /* Every tier lists what it does to the car in plain terms, because a player
@@ -1829,6 +1987,41 @@ var SLOTS = [
       { name: 'Short ratios', cost: 6400, force: 1.13, top: 0.90, d: 'Leaps out of corners. Runs out of road.' },
       { name: 'Long ratios', cost: 6400, force: 0.92, top: 1.09, d: 'Lazy away, enormous down a long straight.' },
       { name: 'Close-ratio race', cost: 19000, force: 1.09, top: 1.02, d: 'Always in the right gear. Costs accordingly.' }
+    ]
+  },
+  {
+    key: 'nos', name: 'Nitrous', blurb: 'Everything at once, and then nothing.',
+    tiers: [
+      { name: 'None', cost: 0, d: 'Nothing in the boot.' },
+      { name: 'Single shot', cost: 9500, nos: 0.30, nosTime: 4, mass: 14,
+        d: '+30% while you hold it, for four seconds a race. The bottle weighs 14 kg for all of it.' },
+      { name: 'Twin bottle', cost: 24000, nos: 0.45, nosTime: 7, mass: 26,
+        d: '+45% for seven seconds. Heavier, and you will still run out before the flag.' },
+      { name: 'Direct port', cost: 52000, nos: 0.62, nosTime: 11, mass: 34,
+        d: '+62% for eleven seconds, and 34 kg you carry round every corner of every lap.' }
+    ]
+  },
+  {
+    key: 'diff', name: 'Differential', blurb: 'Drive off the apex, push wide into it.',
+    tiers: [
+      { name: 'Open', cost: 0, d: 'Whichever wheel gives up first gets the power.' },
+      { name: 'Limited slip', cost: 7200, diff: 0.45,
+        d: 'Puts the power down leaving a corner. A little lazy turning into one.' },
+      { name: 'Plated LSD', cost: 18000, diff: 0.75,
+        d: 'Drives off the apex hard. Noticeably reluctant to change direction.' },
+      { name: 'Spool', cost: 31000, diff: 1.00,
+        d: 'Both wheels locked together, always. Superb in a straight line, stubborn everywhere else.' }
+    ]
+  },
+  {
+    key: 'clutch', name: 'Clutch', blurb: 'What happens in the first second.',
+    tiers: [
+      { name: 'Stock', cost: 0, d: 'Slips a little, saves the gearbox.' },
+      { name: 'Uprated', cost: 4100, launch: 1.12, d: 'Bites harder off the line.' },
+      { name: 'Twin plate', cost: 14500, launch: 1.26, mass: -4,
+        d: 'Launches hard. Grabby at walking pace.' },
+      { name: 'Carbon twin', cost: 33000, launch: 1.40, mass: -9,
+        d: 'Vicious off the line, and nothing subtle about it anywhere else.' }
     ]
   },
   {
@@ -1914,9 +2107,13 @@ function carStats(carKey, parts){
     lag: base.lag || 0,       // m/s below which the turbo does nothing
     force: 1,           // gearing force multiplier
     top: 1,             // gearing top-speed multiplier
-    stability: 1,       // how settled the back end is
+    stability: base.stability || 1,   // how settled the back end is
     offroad: base.offroad || 0,  // 0 = a road car on grass, 1 = barely notices
-    lift: 0             // ride height added, metres - visual and centre of gravity
+    lift: 0,            // ride height added, metres - visual and centre of gravity
+    nos: 0,             // extra power fraction while the bottle is open
+    nosTime: 0,         // seconds of it you get, per race
+    diff: 0,            // 0 = open, 1 = welded solid
+    launch: 1           // clutch bite below walking-out-of-a-corner speed
   };
 
   for(var i = 0; i < SLOTS.length; i++){
@@ -1938,8 +2135,17 @@ function carStats(carKey, parts){
     if(tier.stability) s.stability *= tier.stability;
     if(tier.offroad) s.offroad += tier.offroad;
     if(tier.lift) s.lift += tier.lift;
+    if(tier.nos) s.nos = Math.max(s.nos, tier.nos);
+    if(tier.nosTime) s.nosTime += tier.nosTime;
+    if(tier.diff) s.diff = Math.max(s.diff, tier.diff);
+    if(tier.launch) s.launch *= tier.launch;
   }
   s.offroad = clamp(s.offroad, 0, 1);
+
+  /* A locked differential drags the car straight: it is why a spool puts
+     power down and why it will not turn. Both halves come off the one
+     number, so you cannot have the first without the second. */
+  s.steer *= 1 - 0.07 * s.diff;
 
   /* A car cannot be lighter than its own cage and engine. Without this the
      weight tiers on the lightest car would walk it down towards nothing. */
@@ -1979,10 +2185,19 @@ function driveForce(s, v){
   /* Below walking pace, power/v runs away to infinity. Clamp to the traction
      limit, which is what actually stops a real car from launching harder. */
   var f = p / Math.max(v, 4);
-  return Math.min(f, tractionLimit(s));
+  var limit = tractionLimit(s);
+
+  /* A clutch only buys you anything while it is still slipping, so its help
+     fades out by the time you are rolling properly. */
+  if(s.launch && s.launch !== 1 && v < 14){
+    limit *= 1 + (s.launch - 1) * (1 - v / 14);
+  }
+  return Math.min(f, limit);
 }
 
-function tractionLimit(s){ return s.grip * s.mass * GRAV * TRACTION; }
+function tractionLimit(s){
+  return s.grip * s.mass * GRAV * TRACTION * (1 + 0.10 * (s.diff || 0));
+}
 
 function dragForce(s, v){ return 0.5 * RHO * s.cda * v * v; }
 
@@ -2036,7 +2251,8 @@ function gripAt(s, v){ return s.grip + s.down * v * v / 1000; }
    weight and grip, then brakes. */
 function rating(s){
   var pw = (s.power * 1000) / s.mass;             // W/kg
-  var r = pw * 1.65 + s.grip * 170 + s.brake * 8.5 + topSpeed(s) * 0.9;
+  var r = pw * 1.65 + s.grip * 170 + s.brake * 8.5 + topSpeed(s) * 0.9 +
+          (s.nos || 0) * 55 + (s.launch ? (s.launch - 1) * 90 : 0);
   return Math.round(r);
 }
 
@@ -2140,11 +2356,29 @@ var STRIPES = [
   { n: 'Red', c: 0xd93a30 }, { n: 'Gold', c: 0xd8b03c }, { n: 'Blue', c: 0x3a7fd0 }
 ];
 
+/* All free, all cosmetic, none of it touches carStats. A body kit that
+   secretly added grip would make the garage dishonest, and the garage being
+   honest is the whole point of it. */
+var KITS = [
+  { n: 'Standard', arch: 0, splitter: 0 },
+  { n: 'Lip kit', arch: 0.03, splitter: 0.26 },
+  { n: 'Wide arch', arch: 0.09, splitter: 0.16 },
+  { n: 'Full wide-body', arch: 0.15, splitter: 0.34 }
+];
+
+var WHEEL_SIZES = [
+  { n: 'Stock', d: 0 }, { n: 'Plus one', d: 0.025 },
+  { n: 'Plus two', d: 0.05 }, { n: 'Dish', d: 0.075 }
+];
+
 function looksFor(carKey){
   if(!SAVE.looks[carKey]){
-    SAVE.looks[carKey] = { paint: null, wheel: 1, stripe: 0, spoiler: false };
+    SAVE.looks[carKey] = { paint: null, wheel: 1, stripe: 0, spoiler: false,
+                           kit: 0, size: 0 };
   }
   var l = SAVE.looks[carKey];
+  if(l.kit === undefined) l.kit = 0;
+  if(l.size === undefined) l.size = 0;
   if(l.paint === null || l.paint === undefined) l.paint = defaultPaint(carKey);
   return l;
 }
@@ -2160,7 +2394,7 @@ function defaultPaint(carKey){
 /* ------------------------------------------------------------- the career -- */
 
 /* Each event names the class it is for, so the garage has a point: you tune
-   up to meet the entry, rather than grinding credits against a wall. */
+   up to meet the entry, rather than grinding money against a wall. */
 var EVENTS = [
   { id: 'e1', name: 'Cannery Cup', track: 'ring', laps: 3, field: 3, max: 470,
     prize: [5200, 2600, 1300], d: 'Club night. Anything road-legal, anything slow.' },
@@ -2179,6 +2413,94 @@ var EVENTS = [
   { id: 'e8', name: 'The Redline', track: 'docks', laps: 6, field: 5, max: 9999,
     prize: [60000, 30000, 15000], d: 'No class limit. Six laps. Whatever shows up, shows up.' }
 ];
+
+/* ------------------------------------------------------ championships -- */
+
+/* A season rather than a one-off. The same three rivals turn up in the same
+   cars every round, so the standings table is about people you recognise
+   instead of a fresh anonymous grid each time. Points are the familiar
+   shape: win a round, take ten. */
+var CHAMP_POINTS = [10, 6, 4, 2, 1];
+
+var CHAMPIONSHIPS = [
+  { id: 'ch1', name: 'Clubman Trophy', max: 560,
+    d: 'Four rounds, three tracks, and the same three drivers all season.',
+    prize: [46000, 22000, 11000],
+    rivals: [ { name: 'Vega', car: 'coupe', skill: 0.93 },
+              { name: 'Mertz', car: 'muscle', skill: 0.90 },
+              { name: 'Okafor', car: 'a80', skill: 0.95 } ],
+    rounds: [ { track: 'ring', laps: 3 }, { track: 'docks', laps: 3 },
+              { track: 'ridge', laps: 2 }, { track: 'ring', laps: 4 } ] },
+
+  { id: 'ch2', name: 'Turbo Cup', max: 700,
+    d: 'Boost only. Everyone here is running something that spools.',
+    prize: [88000, 42000, 21000],
+    rivals: [ { name: 'Okafor', car: 'a90', skill: 0.96 },
+              { name: 'Brandt', car: 'gtr', skill: 0.94 },
+              { name: 'Sauer', car: 'evo', skill: 0.95 } ],
+    rounds: [ { track: 'ridge', laps: 3 }, { track: 'docks', laps: 4 },
+              { track: 'ring', laps: 4 }, { track: 'ridge', laps: 3 } ] },
+
+  { id: 'ch3', name: 'The Big Turbos', max: 9999,
+    d: 'No class limit and no sympathy. Whatever you have, bring it.',
+    prize: [180000, 85000, 42000],
+    rivals: [ { name: 'Okafor', car: 'hellcoupe', skill: 0.98 },
+              { name: 'Brandt', car: 'rear', skill: 0.97 },
+              { name: 'Ilves', car: 'super', skill: 0.99 } ],
+    rounds: [ { track: 'ridge', laps: 4 }, { track: 'docks', laps: 5 },
+              { track: 'ring', laps: 5 }, { track: 'ridge', laps: 4 } ] }
+];
+
+function champById(id){
+  for(var i = 0; i < CHAMPIONSHIPS.length; i++) if(CHAMPIONSHIPS[i].id === id) return CHAMPIONSHIPS[i];
+  return null;
+}
+
+function champState(id){
+  if(!SAVE.champ) SAVE.champ = {};
+  if(!SAVE.champ[id]) SAVE.champ[id] = { round: 0, pts: {}, done: false };
+  return SAVE.champ[id];
+}
+
+/* A championship opens once the one before it has been finished. */
+function champOpen(i){
+  if(i === 0) return true;
+  return champState(CHAMPIONSHIPS[i - 1].id).done === true;
+}
+
+/* The round as an event the rest of the game already understands. */
+function champRound(ch, n){
+  var r = ch.rounds[n];
+  return {
+    id: ch.id + 'r' + n,
+    name: ch.name + ' — round ' + (n + 1),
+    track: r.track, laps: r.laps, field: ch.rivals.length, max: ch.max,
+    prize: [Math.round(ch.prize[0] / 6), Math.round(ch.prize[1] / 6),
+            Math.round(ch.prize[2] / 6)],
+    d: ch.d, champ: ch.id, roundNo: n
+  };
+}
+
+function awardChampPoints(ch, orderNames){
+  var st = champState(ch.id);
+  for(var i = 0; i < orderNames.length; i++){
+    var pts = CHAMP_POINTS[i] || 0;
+    st.pts[orderNames[i]] = (st.pts[orderNames[i]] || 0) + pts;
+  }
+  st.round = Math.min(st.round + 1, ch.rounds.length);
+  if(st.round >= ch.rounds.length) st.done = true;
+  saveNow();
+  return st;
+}
+
+function champStandings(ch){
+  var st = champState(ch.id);
+  var names = ['You'];
+  for(var i = 0; i < ch.rivals.length; i++) names.push(ch.rivals[i].name);
+  var rows = names.map(function(n){ return { name: n, pts: st.pts[n] || 0 }; });
+  rows.sort(function(a, b){ return b.pts - a.pts; });
+  return rows;
+}
 
 /* An event is open once the one before it has been finished at all - placing
    last still moves you on, because being stuck behind a race you cannot win
@@ -2365,7 +2687,7 @@ function drawGarage(){
 
   /* One explicit button rather than buying on the row tap. Selecting a part
      shows what it would do to the car; a second, deliberate press is what
-     spends the money. A list where a mis-tap costs 38,000 credits is not a
+     spends the money. A list where a mis-tap costs $38,000 is not a
      shop, it is a trap - and on a phone there is no hover to preview with. */
   var selOwned = ownsPart(carKey, garageSlot, selTier);
   var selCost = slot.tiers[selTier].cost;
@@ -2405,7 +2727,7 @@ function drawGarage(){
       var res = action === 'fit'
         ? { ok: fitPart(SAVE.car, garageSlot, selTier) }
         : buyPart(SAVE.car, garageSlot, selTier);
-      if(!res.ok){ flash($('gSub'), 'Not enough credits for that one.'); return; }
+      if(!res.ok){ flash($('gSub'), 'Not enough money for that one.'); return; }
       garagePreview = null;
       drawGarage();
       refreshCarPreview();
@@ -2431,7 +2753,7 @@ function openShowroom(){
 
 function drawShowroom(){
   var html = '<p class="note2"><b style="color:var(--amber)">' + money(SAVE.credits) +
-             '</b> credits in hand.</p>';
+             '</b> in hand.</p>';
 
   for(var i = 0; i < CAR_ORDER.length; i++){
     var key = CAR_ORDER[i];
@@ -2468,7 +2790,7 @@ function drawShowroom(){
         saveNow();
       } else {
         var res = buyCar(key);
-        if(!res.ok){ flash($('showList'), 'Not enough credits.'); return; }
+        if(!res.ok){ flash($('showList'), 'Not enough money.'); return; }
       }
       drawShowroom();
       refreshCarPreview();
@@ -2521,7 +2843,42 @@ function drawPaint(){
           'that is what the aero in the garage is for.</div></div>' +
           '<span class="cost have">' + (l.spoiler ? 'On' : 'Off') + '</span></div>';
 
+  html += '<h2 style="font-size:22px;margin-top:16px">Body kit</h2><div id="kitRows">';
+  for(var kk = 0; kk < KITS.length; kk++){
+    html += '<div class="row' + (l.kit === kk ? ' on' : '') + '" data-k="kit" data-i="' + kk +
+            '"><div class="grow"><div class="t">' + KITS[kk].n + '</div></div>' +
+            '<span class="cost have">' + (l.kit === kk ? 'On' : 'Fit') + '</span></div>';
+  }
+  html += '</div>';
+
+  html += '<h2 style="font-size:22px;margin-top:16px">Wheel size</h2><div>';
+  for(var ws = 0; ws < WHEEL_SIZES.length; ws++){
+    html += '<div class="row' + (l.size === ws ? ' on' : '') + '" data-k="size" data-i="' + ws +
+            '"><div class="grow"><div class="t">' + WHEEL_SIZES[ws].n + '</div></div>' +
+            '<span class="cost have">' + (l.size === ws ? 'On' : 'Fit') + '</span></div>';
+  }
+  html += '</div>';
+
+  html += '<h2 style="font-size:22px;margin-top:16px">Numberplate</h2>' +
+          '<p class="note2" style="margin-bottom:8px">Eight characters, on the front ' +
+          'and the back. It follows you between cars rather than belonging to one.</p>' +
+          '<input id="plateIn" maxlength="8" value="' +
+          String(SAVE.plate || '').replace(/"/g, '&quot;') +
+          '" placeholder="BIGTURBO" style="width:100%;box-sizing:border-box;padding:11px 13px;' +
+          'font-family:var(--display);font-size:22px;letter-spacing:.12em;text-align:center;' +
+          'text-transform:uppercase;background:#e9e4d0;color:#14161a;border:2px solid var(--line);' +
+          'border-radius:10px">';
+
   $('paintBody').innerHTML = html;
+
+  var plateIn = $('plateIn');
+  if(plateIn){
+    plateIn.oninput = function(){
+      SAVE.plate = plateIn.value.toUpperCase().replace(/[^A-Z0-9 -]/g, '');
+      saveNow();
+      refreshCarPreview();
+    };
+  }
 
   Array.prototype.forEach.call($('paintBody').querySelectorAll('[data-k]'), function(el){
     el.onclick = function(){
@@ -2548,7 +2905,7 @@ function drawEvents(){
   var r = rating(statsOf(carKey));
   $('evSub').innerHTML = 'Driving the <b>' + CARS[carKey].name + '</b> — rating ' + r +
     ', class ' + classOf(r) + '. <b style="color:var(--amber)">' + money(SAVE.credits) +
-    '</b> credits.';
+    '</b>.';
 
   var html = '';
   for(var i = 0; i < EVENTS.length; i++){
@@ -2576,18 +2933,75 @@ function drawEvents(){
             '<span class="chip cls">' + (ev.max > 2000 ? 'Open' : 'Max ' + ev.max) + '</span>' +
             '</div></div>' + right + '</div>';
   }
+  /* ---- championships, under the one-off events ---- */
+  html += '<p class="sub" style="margin:22px 0 10px">Championships</p>';
+
+  for(var c = 0; c < CHAMPIONSHIPS.length; c++){
+    var ch = CHAMPIONSHIPS[c];
+    var st = champState(ch.id);
+    var chOpen = champOpen(c);
+    var chEligible = r <= ch.max;
+
+    var chRight;
+    if(!chOpen) chRight = '<span class="cost cant">Locked</span>';
+    else if(st.done) chRight = '<span class="cost" style="color:var(--green)">Done</span>';
+    else if(!chEligible) chRight = '<span class="cost cant">Over class</span>';
+    else chRight = '<span class="cost">' + money(ch.prize[0]) + '</span>';
+
+    /* The standings are the point of a season, so they are on the card, not
+       hidden behind it. */
+    var table = '';
+    if(st.round > 0){
+      var rows = champStandings(ch);
+      for(var q = 0; q < rows.length; q++){
+        table += '<span class="chip"' +
+                 (rows[q].name === 'You' ? ' style="color:var(--amber)"' : '') + '>' +
+                 rows[q].name + ' ' + rows[q].pts + '</span>';
+      }
+    }
+
+    html += '<div class="row' + (!chOpen || (!chEligible && !st.done) ? ' locked' : '') +
+            '" data-ch="' + c + '">' +
+            '<div class="grow"><div class="t">' + ch.name + '</div>' +
+            '<div class="d">' + ch.d + '</div>' +
+            '<div style="margin-top:6px">' +
+            '<span class="chip">Round ' + Math.min(st.round + 1, ch.rounds.length) +
+            ' of ' + ch.rounds.length + '</span>' +
+            '<span class="chip cls">' + (ch.max > 2000 ? 'Open' : 'Max ' + ch.max) + '</span>' +
+            table + '</div></div>' + chRight + '</div>';
+  }
+
   $('evList').innerHTML = html;
 
   Array.prototype.forEach.call($('evList').querySelectorAll('.row'), function(row){
-    var i = parseInt(row.getAttribute('data-ev'), 10);
+    var evi = row.getAttribute('data-ev');
+    var chi = row.getAttribute('data-ch');
+
+    if(evi !== null){
+      var i = parseInt(evi, 10);
+      row.onclick = function(){
+        var ev = EVENTS[i];
+        if(!eventOpen(i)){ flash($('evSub'), 'Finish the one before it first.'); return; }
+        if(rating(statsOf(SAVE.car)) > ev.max){
+          flash($('evSub'), 'Your car is over the class limit for this one.');
+          return;
+        }
+        openGrid(ev);
+      };
+      return;
+    }
+
+    var ci = parseInt(chi, 10);
     row.onclick = function(){
-      var ev = EVENTS[i];
-      if(!eventOpen(i)){ flash($('evSub'), 'Finish the one before it first.'); return; }
-      if(rating(statsOf(SAVE.car)) > ev.max){
-        flash($('evSub'), 'Your car is over the class limit for this one.');
+      var ch2 = CHAMPIONSHIPS[ci];
+      var st2 = champState(ch2.id);
+      if(!champOpen(ci)){ flash($('evSub'), 'Win the season before it first.'); return; }
+      if(st2.done){ flash($('evSub'), 'That season is already in the books.'); return; }
+      if(rating(statsOf(SAVE.car)) > ch2.max){
+        flash($('evSub'), 'Your car is over the class limit for this season.');
         return;
       }
-      openGrid(ev);
+      openGrid(champRound(ch2, st2.round));
     };
   });
 }
@@ -2613,6 +3027,65 @@ function openGrid(ev){
   $('gridNote').textContent = best
     ? 'Your best lap here: ' + fmtTime(best)
     : 'You have not set a lap here yet.';
+
+  renderWager(ev);
+}
+
+/* ---------------------------------------------------------------- the bet -- */
+
+/* The only way to lose money in the game. Prize money alone means your pile
+   only ever goes up, which makes every number on it meaningless after an
+   hour; a bet you can lose is what gives the rest of the economy weight.
+   It is still money won by driving - nothing here can be topped up, and the
+   stake is capped at what you are holding. */
+var WAGER_STEPS = [0, 2500, 10000, 40000, 150000];
+var wagerStake = 0;
+
+/* Longer odds for taking on a field that outclasses your car, because that
+   is the bet actually worth offering. */
+function wagerOdds(ev){
+  var mine = rating(statsOf(SAVE.car));
+  var theirs = fieldRating(ev);
+  var edge = theirs / Math.max(mine, 1);
+  return clamp(Math.round(edge * 20) / 10, 1.4, 4.0);
+}
+
+function fieldRating(ev){
+  var best = 0;
+  for(var i = 0; i < CAR_ORDER.length; i++){
+    var r = rating(carStats(CAR_ORDER[i], {}));
+    if(r <= ev.max && r > best) best = r;
+  }
+  return best || rating(statsOf(SAVE.car));
+}
+
+function renderWager(ev){
+  var odds = wagerOdds(ev);
+  if(wagerStake > SAVE.credits) wagerStake = 0;
+
+  $('wagerOdds').innerHTML = '&middot; win pays <b style="color:var(--amber)">' +
+    odds.toFixed(1) + 'x</b>';
+
+  var html = '';
+  for(var i = 0; i < WAGER_STEPS.length; i++){
+    var v = WAGER_STEPS[i];
+    if(v > SAVE.credits && v !== 0) continue;
+    html += '<button data-bet="' + v + '"' + (v === wagerStake ? ' class="on"' : '') +
+            '>' + (v === 0 ? 'No bet' : money(v)) + '</button>';
+  }
+  $('wagerBtns').innerHTML = html;
+  Array.prototype.forEach.call($('wagerBtns').children, function(b){
+    b.onclick = function(){
+      wagerStake = parseInt(b.getAttribute('data-bet'), 10) || 0;
+      renderWager(ev);
+    };
+  });
+
+  $('wagerNote').innerHTML = wagerStake === 0
+    ? 'Race for the prize money only.'
+    : 'Win and you take <b style="color:var(--green)">' +
+      money(Math.round(wagerStake * odds)) + '</b> on top. Finish anywhere else and ' +
+      'the <b style="color:var(--red)">' + money(wagerStake) + '</b> is gone.';
 }
 /* =========================================================================
    5  THE LOOP
@@ -2640,7 +3113,8 @@ function init(){
   enterShowcase();
 
   if(isTouch()) show('touch');
-  ['padL|left', 'padR|right', 'padG|go', 'padB|brake', 'padH|hand'].forEach(function(p){
+  ['padL|left', 'padR|right', 'padG|go', 'padB|brake', 'padH|hand',
+   'padN|nos'].forEach(function(p){
     var bits = p.split('|');
     bindPad(bits[0], bits[1]);
   });
@@ -2689,7 +3163,9 @@ function refreshCarPreview(){
     showcase.remove(showcase.userData.car);
     disposeTree(showcase.userData.car);
   }
-  var car = buildCar(SAVE.car, looksFor(SAVE.car), statsOf(SAVE.car).lift);
+  var yourLooks = looksFor(SAVE.car);
+  yourLooks.plate = SAVE.plate || '';
+  var car = buildCar(SAVE.car, yourLooks, statsOf(SAVE.car).lift);
   showcase.add(car);
   showcase.userData.car = car;
   updateMenu();
@@ -2726,6 +3202,27 @@ function buildField(ev){
   var names = ['Vega', 'Ruiz', 'Kowalski', 'Osei', 'Lindqvist', 'Tanaka', 'Mbeki'];
   var yourRating = rating(statsOf(SAVE.car));
 
+  /* A championship round is not a fresh anonymous grid: the same three
+     rivals in the same cars, every round, so the standings are about people
+     you have been racing all season. They are tuned towards you the same way
+     as anyone else, or round four would be a walkover either direction. */
+  if(ev.champ){
+    var ch = champById(ev.champ);
+    for(var v = 0; v < ch.rivals.length; v++){
+      var riv = ch.rivals[v];
+      var rp = {}, rt = 0;
+      while(rating(carStats(riv.car, rp)) < yourRating * 0.96 && rt < 40){
+        var sl = SLOTS[rt % SLOTS.length];
+        var cv = rp[sl.key] || 0;
+        if(cv < sl.tiers.length - 1 && sl.key !== 'gears') rp[sl.key] = cv + 1;
+        rt++;
+        if(rating(carStats(riv.car, rp)) > ch.max){ rp[sl.key] = cv; break; }
+      }
+      out.push({ car: riv.car, parts: rp, name: riv.name, skill: riv.skill });
+    }
+    return out;
+  }
+
   for(var i = 0; i < ev.field; i++){
     /* Pick the quickest car that still fits the class, then add parts until
        it is in the same neighbourhood as the player's. */
@@ -2761,6 +3258,8 @@ function startRace(opts){
   hideAll();
   G.event = opts.event || null;
   G.kind = opts.kind || 'race';      // 'race', 'drag' or 'roam'
+  G.wager = opts.wager || 0;         // staked before the flag, settled after it
+  G.odds = opts.odds || 0;
   G.laps = opts.laps;
   G.track = buildTrack(opts.track);
 
@@ -2788,7 +3287,9 @@ function startRace(opts){
     var car = G.cars[c];
     var looks = car.isYou ? looksFor(SAVE.car)
                           : { paint: (c * 5) % PAINTS.length, wheel: c % WHEELS.length,
-                              stripe: 0, spoiler: c % 2 === 0 };
+                              stripe: 0, spoiler: c % 2 === 0, kit: c % KITS.length,
+                              size: 0 };
+    if(car.isYou) looks.plate = SAVE.plate || '';
     var obj = buildCar(car.key, looks, car.stats.lift);
     car.obj = obj;
     scene.add(obj);
@@ -3028,6 +3529,20 @@ function drawHUD(){
     }
   }
 
+  /* Nitrous left, as a bar under the speed. Hidden entirely when there is no
+     bottle fitted, so a car without one has nothing extra on screen. */
+  var nosEl = $('nos'), padN = $('padN');
+  if(you.stats.nosTime > 0){
+    nosEl.classList.add('on');
+    padN.classList.add('armed');
+    var frac2 = clamp(you.nosLeft / you.stats.nosTime, 0, 1);
+    $('nosFill').style.width = (frac2 * 100).toFixed(0) + '%';
+    $('nosFill').style.background = you.nosOn ? 'var(--red)' : 'var(--blue)';
+  } else {
+    nosEl.classList.remove('on');
+    padN.classList.remove('armed');
+  }
+
   if(bannerTimer > 0){
     bannerTimer -= 1 / 60;
     if(bannerTimer <= 0) $('banner').classList.remove('show');
@@ -3125,7 +3640,13 @@ function endRace(){
   } else {
     prize = Math.max(400, Math.round(1800 / pos));
   }
-  SAVE.credits += prize;
+  /* Settle the side bet. Winning pays the stake at the offered odds on top of
+     the prize; anything else and the stake is gone. This is the only way the
+     number in your pocket ever goes down. */
+  var bet = 0;
+  if(G.wager > 0) bet = pos === 1 ? Math.round(G.wager * G.odds) : -G.wager;
+
+  SAVE.credits = Math.max(0, SAVE.credits + prize + bet);
   saveNow();
 
   $('resTitle').textContent = pos === 1 ? 'Won it' : 'P' + pos;
@@ -3136,10 +3657,13 @@ function endRace(){
   var rows = '';
   for(var i = 0; i < order.length; i++){
     var car = order[i];
+    /* The race ends the moment you cross, so anyone behind you is still out
+       there driving. They are classified on position, not retired - calling
+       that a DNF was simply untrue. */
     var t = car.finished
       ? (i === 0 ? fmtTime(car.finishTime)
                  : '+' + (car.finishTime - order[0].finishTime).toFixed(1))
-      : 'DNF';
+      : '—';
     rows += '<tr' + (car.isYou ? ' class="you"' : '') + '>' +
             '<td class="p">' + (i + 1) + '</td>' +
             '<td>' + car.name + '</td>' +
@@ -3148,10 +3672,44 @@ function endRace(){
   }
   $('resTable').innerHTML = rows;
 
-  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b> credits.';
+  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
+  if(bet > 0) note += ' Your bet paid <b style="color:var(--green)">' +
+                      money(bet) + '</b>.';
+  if(bet < 0) note += ' Your bet cost you <b style="color:var(--red)">' +
+                      money(bet) + '</b>.';
   if(you.best !== null) note += ' Best lap ' + fmtTime(you.best) + '.';
   if(SAVE.best[G.track.key] === you.best && you.best !== null) note += ' A new record here.';
   $('resNote').innerHTML = note;
+
+  /* A championship round also scores points, and the standings go on the
+     card - a round you came third in still moved the season. */
+  if(G.event && G.event.champ){
+    var ch2 = champById(G.event.champ);
+    var st = awardChampPoints(ch2, order.map(function(c){ return c.isYou ? 'You' : c.name; }));
+
+    var rows2 = champStandings(ch2), tbl = '';
+    for(var k = 0; k < rows2.length; k++){
+      tbl += '<tr' + (rows2[k].name === 'You' ? ' class="you"' : '') + '>' +
+             '<td class="p">' + (k + 1) + '</td><td>' + rows2[k].name +
+             '</td><td></td><td class="t">' + rows2[k].pts + ' pts</td></tr>';
+    }
+    $('resTable').innerHTML += '<tr><td colspan="4" style="padding-top:12px;' +
+      'color:var(--muted);font-size:10px;letter-spacing:.16em;text-transform:uppercase">' +
+      (st.done ? 'Final standings' : 'Standings after round ' + st.round) + '</td></tr>' + tbl;
+
+    if(st.done){
+      var champPos = rows2.findIndex(function(x){ return x.name === 'You'; }) + 1;
+      var champPay = ch2.prize[champPos - 1] || 0;
+      SAVE.credits += champPay;
+      saveNow();
+      $('resTitle').textContent = champPos === 1 ? 'Champion' : 'Season over';
+      if(champPay > 0){
+        note += ' <b style="color:var(--amber)">' + money(champPay) +
+                '</b> for finishing P' + champPos + ' in the ' + ch2.name + '.';
+      }
+      $('resNote').innerHTML = note;
+    }
+  }
 
   updateMenu();
   show('ovResult');
@@ -3187,7 +3745,7 @@ function endDrag(order, pos){
   }
   $('resTable').innerHTML = rows;
 
-  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b> credits.';
+  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
   if(G.react !== null) note += ' Reaction ' + G.react.toFixed(3) + 's.';
   if(G.foul) note += ' You left before the green.';
   if(isBest) note += ' Your best quarter in this car.';
@@ -3268,7 +3826,8 @@ function wire(){
 
   $('btnGo').onclick = function(){
     var ev = pendingEvent;
-    startRace({ track: ev.track, laps: ev.laps, event: ev, field: buildField(ev) });
+    startRace({ track: ev.track, laps: ev.laps, event: ev, field: buildField(ev),
+                wager: wagerStake, odds: wagerOdds(ev) });
   };
 
   $('btnResume').onclick = togglePause;

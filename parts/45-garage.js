@@ -12,7 +12,7 @@
       a stripped shell is quick and nervous. A shopping list with an obvious
       right answer is not a garage, it is a queue.
 
-   2. Nothing costs real money, ever. Credits come from driving. There is no
+   2. Nothing costs real money, ever. The money comes from driving. There is no
       shop, no currency, no ads, and nothing that can be bought with a card.
    ========================================================================= */
 
@@ -99,6 +99,40 @@ var CARS = {
     price: 104000, mass: 2470, power: 529, grip: 0.95, brake: 9.8, steer: 1.75, cda: 1.08,
     body: 'suv', colour: 0x2a6e4a
   },
+  rx: {
+    name: 'Kaido 13B', nick: 'The rotary',
+    desc: 'A rotary, so it revs past where everything else has given up. Light, delicate, and allergic to neglect.',
+    price: 64000, mass: 1280, power: 188, grip: 1.22, brake: 11.2, steer: 2.60, cda: 0.62,
+    boost: 0.15, lag: 11, stability: 0.96,
+    body: 'rx', colour: 0xf2e9d8
+  },
+  evo: {
+    name: 'Lancet RS', nick: 'The Evo',
+    desc: 'Four driven wheels and a turbo, in a shell with no interior worth mentioning. It simply goes where you point it.',
+    price: 84000, mass: 1410, power: 206, grip: 1.34, brake: 11.8, steer: 2.65, cda: 0.74,
+    boost: 0.18, lag: 9,
+    body: 'evo', colour: 0xe8e8ea
+  },
+  gtr: {
+    name: 'Nakagawa R34', nick: 'The Skyline',
+    desc: 'Twin turbos, all-wheel drive and more computers than the rest of this showroom combined. Heavy, and it never once feels it.',
+    price: 88000, mass: 1560, power: 206, grip: 1.32, brake: 11.6, steer: 2.45, cda: 0.68,
+    boost: 0.17, lag: 10,
+    body: 'gtr', colour: 0x5aa8e8
+  },
+  rear: {
+    name: 'Pelican 930', nick: 'The widowmaker',
+    desc: 'Engine behind the back axle and a turbo that arrives all at once at 36 mph. Quick, and it has opinions about lifting mid-corner.',
+    price: 128000, mass: 1470, power: 283, grip: 1.30, brake: 11.9, steer: 2.50, cda: 0.60,
+    boost: 0.22, lag: 16, stability: 0.88,
+    body: 'rear', colour: 0xf2d04a
+  },
+  super: {
+    name: 'Toro SV', nick: 'The supercar',
+    desc: 'Mid-engined, naturally aspirated and completely impractical. The fastest thing here that still has a numberplate.',
+    price: 140000, mass: 1525, power: 471, grip: 1.38, brake: 12.6, steer: 2.60, cda: 0.64,
+    body: 'super', colour: 0x8ad83c
+  },
   trx: {
     name: 'Warhawk TRX', nick: 'The truck',
     desc: 'Supercharged pickup on knobbly tyres. Hopeless in a corner, hilarious everywhere else, and it does not care about grass.',
@@ -119,8 +153,9 @@ function isTruck(carKey){
 /* Showroom order, and the order the AI picks from. Sorted by rating, which
    the tests enforce - a showroom that is not in order is a showroom that
    lies about which car is the step up. */
-var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'muscle', 'rally',
-                 'hellwagon', 'a90', 'hellsedan', 'hellcoupe', 'proto'];
+var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'gtr', 'rx', 'muscle', 'evo',
+                 'rally', 'hellwagon', 'a90', 'rear', 'hellsedan', 'hellcoupe',
+                 'super', 'proto'];
 
 /* ----------------------------------------------------------------- parts -- */
 /* Every tier lists what it does to the car in plain terms, because a player
@@ -188,6 +223,41 @@ var SLOTS = [
       { name: 'Short ratios', cost: 6400, force: 1.13, top: 0.90, d: 'Leaps out of corners. Runs out of road.' },
       { name: 'Long ratios', cost: 6400, force: 0.92, top: 1.09, d: 'Lazy away, enormous down a long straight.' },
       { name: 'Close-ratio race', cost: 19000, force: 1.09, top: 1.02, d: 'Always in the right gear. Costs accordingly.' }
+    ]
+  },
+  {
+    key: 'nos', name: 'Nitrous', blurb: 'Everything at once, and then nothing.',
+    tiers: [
+      { name: 'None', cost: 0, d: 'Nothing in the boot.' },
+      { name: 'Single shot', cost: 9500, nos: 0.30, nosTime: 4, mass: 14,
+        d: '+30% while you hold it, for four seconds a race. The bottle weighs 14 kg for all of it.' },
+      { name: 'Twin bottle', cost: 24000, nos: 0.45, nosTime: 7, mass: 26,
+        d: '+45% for seven seconds. Heavier, and you will still run out before the flag.' },
+      { name: 'Direct port', cost: 52000, nos: 0.62, nosTime: 11, mass: 34,
+        d: '+62% for eleven seconds, and 34 kg you carry round every corner of every lap.' }
+    ]
+  },
+  {
+    key: 'diff', name: 'Differential', blurb: 'Drive off the apex, push wide into it.',
+    tiers: [
+      { name: 'Open', cost: 0, d: 'Whichever wheel gives up first gets the power.' },
+      { name: 'Limited slip', cost: 7200, diff: 0.45,
+        d: 'Puts the power down leaving a corner. A little lazy turning into one.' },
+      { name: 'Plated LSD', cost: 18000, diff: 0.75,
+        d: 'Drives off the apex hard. Noticeably reluctant to change direction.' },
+      { name: 'Spool', cost: 31000, diff: 1.00,
+        d: 'Both wheels locked together, always. Superb in a straight line, stubborn everywhere else.' }
+    ]
+  },
+  {
+    key: 'clutch', name: 'Clutch', blurb: 'What happens in the first second.',
+    tiers: [
+      { name: 'Stock', cost: 0, d: 'Slips a little, saves the gearbox.' },
+      { name: 'Uprated', cost: 4100, launch: 1.12, d: 'Bites harder off the line.' },
+      { name: 'Twin plate', cost: 14500, launch: 1.26, mass: -4,
+        d: 'Launches hard. Grabby at walking pace.' },
+      { name: 'Carbon twin', cost: 33000, launch: 1.40, mass: -9,
+        d: 'Vicious off the line, and nothing subtle about it anywhere else.' }
     ]
   },
   {
@@ -273,9 +343,13 @@ function carStats(carKey, parts){
     lag: base.lag || 0,       // m/s below which the turbo does nothing
     force: 1,           // gearing force multiplier
     top: 1,             // gearing top-speed multiplier
-    stability: 1,       // how settled the back end is
+    stability: base.stability || 1,   // how settled the back end is
     offroad: base.offroad || 0,  // 0 = a road car on grass, 1 = barely notices
-    lift: 0             // ride height added, metres - visual and centre of gravity
+    lift: 0,            // ride height added, metres - visual and centre of gravity
+    nos: 0,             // extra power fraction while the bottle is open
+    nosTime: 0,         // seconds of it you get, per race
+    diff: 0,            // 0 = open, 1 = welded solid
+    launch: 1           // clutch bite below walking-out-of-a-corner speed
   };
 
   for(var i = 0; i < SLOTS.length; i++){
@@ -297,8 +371,17 @@ function carStats(carKey, parts){
     if(tier.stability) s.stability *= tier.stability;
     if(tier.offroad) s.offroad += tier.offroad;
     if(tier.lift) s.lift += tier.lift;
+    if(tier.nos) s.nos = Math.max(s.nos, tier.nos);
+    if(tier.nosTime) s.nosTime += tier.nosTime;
+    if(tier.diff) s.diff = Math.max(s.diff, tier.diff);
+    if(tier.launch) s.launch *= tier.launch;
   }
   s.offroad = clamp(s.offroad, 0, 1);
+
+  /* A locked differential drags the car straight: it is why a spool puts
+     power down and why it will not turn. Both halves come off the one
+     number, so you cannot have the first without the second. */
+  s.steer *= 1 - 0.07 * s.diff;
 
   /* A car cannot be lighter than its own cage and engine. Without this the
      weight tiers on the lightest car would walk it down towards nothing. */
@@ -338,10 +421,19 @@ function driveForce(s, v){
   /* Below walking pace, power/v runs away to infinity. Clamp to the traction
      limit, which is what actually stops a real car from launching harder. */
   var f = p / Math.max(v, 4);
-  return Math.min(f, tractionLimit(s));
+  var limit = tractionLimit(s);
+
+  /* A clutch only buys you anything while it is still slipping, so its help
+     fades out by the time you are rolling properly. */
+  if(s.launch && s.launch !== 1 && v < 14){
+    limit *= 1 + (s.launch - 1) * (1 - v / 14);
+  }
+  return Math.min(f, limit);
 }
 
-function tractionLimit(s){ return s.grip * s.mass * GRAV * TRACTION; }
+function tractionLimit(s){
+  return s.grip * s.mass * GRAV * TRACTION * (1 + 0.10 * (s.diff || 0));
+}
 
 function dragForce(s, v){ return 0.5 * RHO * s.cda * v * v; }
 
@@ -395,7 +487,8 @@ function gripAt(s, v){ return s.grip + s.down * v * v / 1000; }
    weight and grip, then brakes. */
 function rating(s){
   var pw = (s.power * 1000) / s.mass;             // W/kg
-  var r = pw * 1.65 + s.grip * 170 + s.brake * 8.5 + topSpeed(s) * 0.9;
+  var r = pw * 1.65 + s.grip * 170 + s.brake * 8.5 + topSpeed(s) * 0.9 +
+          (s.nos || 0) * 55 + (s.launch ? (s.launch - 1) * 90 : 0);
   return Math.round(r);
 }
 
@@ -499,11 +592,29 @@ var STRIPES = [
   { n: 'Red', c: 0xd93a30 }, { n: 'Gold', c: 0xd8b03c }, { n: 'Blue', c: 0x3a7fd0 }
 ];
 
+/* All free, all cosmetic, none of it touches carStats. A body kit that
+   secretly added grip would make the garage dishonest, and the garage being
+   honest is the whole point of it. */
+var KITS = [
+  { n: 'Standard', arch: 0, splitter: 0 },
+  { n: 'Lip kit', arch: 0.03, splitter: 0.26 },
+  { n: 'Wide arch', arch: 0.09, splitter: 0.16 },
+  { n: 'Full wide-body', arch: 0.15, splitter: 0.34 }
+];
+
+var WHEEL_SIZES = [
+  { n: 'Stock', d: 0 }, { n: 'Plus one', d: 0.025 },
+  { n: 'Plus two', d: 0.05 }, { n: 'Dish', d: 0.075 }
+];
+
 function looksFor(carKey){
   if(!SAVE.looks[carKey]){
-    SAVE.looks[carKey] = { paint: null, wheel: 1, stripe: 0, spoiler: false };
+    SAVE.looks[carKey] = { paint: null, wheel: 1, stripe: 0, spoiler: false,
+                           kit: 0, size: 0 };
   }
   var l = SAVE.looks[carKey];
+  if(l.kit === undefined) l.kit = 0;
+  if(l.size === undefined) l.size = 0;
   if(l.paint === null || l.paint === undefined) l.paint = defaultPaint(carKey);
   return l;
 }
@@ -519,7 +630,7 @@ function defaultPaint(carKey){
 /* ------------------------------------------------------------- the career -- */
 
 /* Each event names the class it is for, so the garage has a point: you tune
-   up to meet the entry, rather than grinding credits against a wall. */
+   up to meet the entry, rather than grinding money against a wall. */
 var EVENTS = [
   { id: 'e1', name: 'Cannery Cup', track: 'ring', laps: 3, field: 3, max: 470,
     prize: [5200, 2600, 1300], d: 'Club night. Anything road-legal, anything slow.' },
@@ -538,6 +649,94 @@ var EVENTS = [
   { id: 'e8', name: 'The Redline', track: 'docks', laps: 6, field: 5, max: 9999,
     prize: [60000, 30000, 15000], d: 'No class limit. Six laps. Whatever shows up, shows up.' }
 ];
+
+/* ------------------------------------------------------ championships -- */
+
+/* A season rather than a one-off. The same three rivals turn up in the same
+   cars every round, so the standings table is about people you recognise
+   instead of a fresh anonymous grid each time. Points are the familiar
+   shape: win a round, take ten. */
+var CHAMP_POINTS = [10, 6, 4, 2, 1];
+
+var CHAMPIONSHIPS = [
+  { id: 'ch1', name: 'Clubman Trophy', max: 560,
+    d: 'Four rounds, three tracks, and the same three drivers all season.',
+    prize: [46000, 22000, 11000],
+    rivals: [ { name: 'Vega', car: 'coupe', skill: 0.93 },
+              { name: 'Mertz', car: 'muscle', skill: 0.90 },
+              { name: 'Okafor', car: 'a80', skill: 0.95 } ],
+    rounds: [ { track: 'ring', laps: 3 }, { track: 'docks', laps: 3 },
+              { track: 'ridge', laps: 2 }, { track: 'ring', laps: 4 } ] },
+
+  { id: 'ch2', name: 'Turbo Cup', max: 700,
+    d: 'Boost only. Everyone here is running something that spools.',
+    prize: [88000, 42000, 21000],
+    rivals: [ { name: 'Okafor', car: 'a90', skill: 0.96 },
+              { name: 'Brandt', car: 'gtr', skill: 0.94 },
+              { name: 'Sauer', car: 'evo', skill: 0.95 } ],
+    rounds: [ { track: 'ridge', laps: 3 }, { track: 'docks', laps: 4 },
+              { track: 'ring', laps: 4 }, { track: 'ridge', laps: 3 } ] },
+
+  { id: 'ch3', name: 'The Big Turbos', max: 9999,
+    d: 'No class limit and no sympathy. Whatever you have, bring it.',
+    prize: [180000, 85000, 42000],
+    rivals: [ { name: 'Okafor', car: 'hellcoupe', skill: 0.98 },
+              { name: 'Brandt', car: 'rear', skill: 0.97 },
+              { name: 'Ilves', car: 'super', skill: 0.99 } ],
+    rounds: [ { track: 'ridge', laps: 4 }, { track: 'docks', laps: 5 },
+              { track: 'ring', laps: 5 }, { track: 'ridge', laps: 4 } ] }
+];
+
+function champById(id){
+  for(var i = 0; i < CHAMPIONSHIPS.length; i++) if(CHAMPIONSHIPS[i].id === id) return CHAMPIONSHIPS[i];
+  return null;
+}
+
+function champState(id){
+  if(!SAVE.champ) SAVE.champ = {};
+  if(!SAVE.champ[id]) SAVE.champ[id] = { round: 0, pts: {}, done: false };
+  return SAVE.champ[id];
+}
+
+/* A championship opens once the one before it has been finished. */
+function champOpen(i){
+  if(i === 0) return true;
+  return champState(CHAMPIONSHIPS[i - 1].id).done === true;
+}
+
+/* The round as an event the rest of the game already understands. */
+function champRound(ch, n){
+  var r = ch.rounds[n];
+  return {
+    id: ch.id + 'r' + n,
+    name: ch.name + ' — round ' + (n + 1),
+    track: r.track, laps: r.laps, field: ch.rivals.length, max: ch.max,
+    prize: [Math.round(ch.prize[0] / 6), Math.round(ch.prize[1] / 6),
+            Math.round(ch.prize[2] / 6)],
+    d: ch.d, champ: ch.id, roundNo: n
+  };
+}
+
+function awardChampPoints(ch, orderNames){
+  var st = champState(ch.id);
+  for(var i = 0; i < orderNames.length; i++){
+    var pts = CHAMP_POINTS[i] || 0;
+    st.pts[orderNames[i]] = (st.pts[orderNames[i]] || 0) + pts;
+  }
+  st.round = Math.min(st.round + 1, ch.rounds.length);
+  if(st.round >= ch.rounds.length) st.done = true;
+  saveNow();
+  return st;
+}
+
+function champStandings(ch){
+  var st = champState(ch.id);
+  var names = ['You'];
+  for(var i = 0; i < ch.rivals.length; i++) names.push(ch.rivals[i].name);
+  var rows = names.map(function(n){ return { name: n, pts: st.pts[n] || 0 }; });
+  rows.sort(function(a, b){ return b.pts - a.pts; });
+  return rows;
+}
 
 /* An event is open once the one before it has been finished at all - placing
    last still moves you on, because being stuck behind a race you cannot win

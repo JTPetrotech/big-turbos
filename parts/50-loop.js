@@ -24,7 +24,8 @@ function init(){
   enterShowcase();
 
   if(isTouch()) show('touch');
-  ['padL|left', 'padR|right', 'padG|go', 'padB|brake', 'padH|hand'].forEach(function(p){
+  ['padL|left', 'padR|right', 'padG|go', 'padB|brake', 'padH|hand',
+   'padN|nos'].forEach(function(p){
     var bits = p.split('|');
     bindPad(bits[0], bits[1]);
   });
@@ -73,7 +74,9 @@ function refreshCarPreview(){
     showcase.remove(showcase.userData.car);
     disposeTree(showcase.userData.car);
   }
-  var car = buildCar(SAVE.car, looksFor(SAVE.car), statsOf(SAVE.car).lift);
+  var yourLooks = looksFor(SAVE.car);
+  yourLooks.plate = SAVE.plate || '';
+  var car = buildCar(SAVE.car, yourLooks, statsOf(SAVE.car).lift);
   showcase.add(car);
   showcase.userData.car = car;
   updateMenu();
@@ -110,6 +113,27 @@ function buildField(ev){
   var names = ['Vega', 'Ruiz', 'Kowalski', 'Osei', 'Lindqvist', 'Tanaka', 'Mbeki'];
   var yourRating = rating(statsOf(SAVE.car));
 
+  /* A championship round is not a fresh anonymous grid: the same three
+     rivals in the same cars, every round, so the standings are about people
+     you have been racing all season. They are tuned towards you the same way
+     as anyone else, or round four would be a walkover either direction. */
+  if(ev.champ){
+    var ch = champById(ev.champ);
+    for(var v = 0; v < ch.rivals.length; v++){
+      var riv = ch.rivals[v];
+      var rp = {}, rt = 0;
+      while(rating(carStats(riv.car, rp)) < yourRating * 0.96 && rt < 40){
+        var sl = SLOTS[rt % SLOTS.length];
+        var cv = rp[sl.key] || 0;
+        if(cv < sl.tiers.length - 1 && sl.key !== 'gears') rp[sl.key] = cv + 1;
+        rt++;
+        if(rating(carStats(riv.car, rp)) > ch.max){ rp[sl.key] = cv; break; }
+      }
+      out.push({ car: riv.car, parts: rp, name: riv.name, skill: riv.skill });
+    }
+    return out;
+  }
+
   for(var i = 0; i < ev.field; i++){
     /* Pick the quickest car that still fits the class, then add parts until
        it is in the same neighbourhood as the player's. */
@@ -145,6 +169,8 @@ function startRace(opts){
   hideAll();
   G.event = opts.event || null;
   G.kind = opts.kind || 'race';      // 'race', 'drag' or 'roam'
+  G.wager = opts.wager || 0;         // staked before the flag, settled after it
+  G.odds = opts.odds || 0;
   G.laps = opts.laps;
   G.track = buildTrack(opts.track);
 
@@ -172,7 +198,9 @@ function startRace(opts){
     var car = G.cars[c];
     var looks = car.isYou ? looksFor(SAVE.car)
                           : { paint: (c * 5) % PAINTS.length, wheel: c % WHEELS.length,
-                              stripe: 0, spoiler: c % 2 === 0 };
+                              stripe: 0, spoiler: c % 2 === 0, kit: c % KITS.length,
+                              size: 0 };
+    if(car.isYou) looks.plate = SAVE.plate || '';
     var obj = buildCar(car.key, looks, car.stats.lift);
     car.obj = obj;
     scene.add(obj);
@@ -412,6 +440,20 @@ function drawHUD(){
     }
   }
 
+  /* Nitrous left, as a bar under the speed. Hidden entirely when there is no
+     bottle fitted, so a car without one has nothing extra on screen. */
+  var nosEl = $('nos'), padN = $('padN');
+  if(you.stats.nosTime > 0){
+    nosEl.classList.add('on');
+    padN.classList.add('armed');
+    var frac2 = clamp(you.nosLeft / you.stats.nosTime, 0, 1);
+    $('nosFill').style.width = (frac2 * 100).toFixed(0) + '%';
+    $('nosFill').style.background = you.nosOn ? 'var(--red)' : 'var(--blue)';
+  } else {
+    nosEl.classList.remove('on');
+    padN.classList.remove('armed');
+  }
+
   if(bannerTimer > 0){
     bannerTimer -= 1 / 60;
     if(bannerTimer <= 0) $('banner').classList.remove('show');
@@ -509,7 +551,13 @@ function endRace(){
   } else {
     prize = Math.max(400, Math.round(1800 / pos));
   }
-  SAVE.credits += prize;
+  /* Settle the side bet. Winning pays the stake at the offered odds on top of
+     the prize; anything else and the stake is gone. This is the only way the
+     number in your pocket ever goes down. */
+  var bet = 0;
+  if(G.wager > 0) bet = pos === 1 ? Math.round(G.wager * G.odds) : -G.wager;
+
+  SAVE.credits = Math.max(0, SAVE.credits + prize + bet);
   saveNow();
 
   $('resTitle').textContent = pos === 1 ? 'Won it' : 'P' + pos;
@@ -520,10 +568,13 @@ function endRace(){
   var rows = '';
   for(var i = 0; i < order.length; i++){
     var car = order[i];
+    /* The race ends the moment you cross, so anyone behind you is still out
+       there driving. They are classified on position, not retired - calling
+       that a DNF was simply untrue. */
     var t = car.finished
       ? (i === 0 ? fmtTime(car.finishTime)
                  : '+' + (car.finishTime - order[0].finishTime).toFixed(1))
-      : 'DNF';
+      : '—';
     rows += '<tr' + (car.isYou ? ' class="you"' : '') + '>' +
             '<td class="p">' + (i + 1) + '</td>' +
             '<td>' + car.name + '</td>' +
@@ -532,10 +583,44 @@ function endRace(){
   }
   $('resTable').innerHTML = rows;
 
-  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b> credits.';
+  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
+  if(bet > 0) note += ' Your bet paid <b style="color:var(--green)">' +
+                      money(bet) + '</b>.';
+  if(bet < 0) note += ' Your bet cost you <b style="color:var(--red)">' +
+                      money(bet) + '</b>.';
   if(you.best !== null) note += ' Best lap ' + fmtTime(you.best) + '.';
   if(SAVE.best[G.track.key] === you.best && you.best !== null) note += ' A new record here.';
   $('resNote').innerHTML = note;
+
+  /* A championship round also scores points, and the standings go on the
+     card - a round you came third in still moved the season. */
+  if(G.event && G.event.champ){
+    var ch2 = champById(G.event.champ);
+    var st = awardChampPoints(ch2, order.map(function(c){ return c.isYou ? 'You' : c.name; }));
+
+    var rows2 = champStandings(ch2), tbl = '';
+    for(var k = 0; k < rows2.length; k++){
+      tbl += '<tr' + (rows2[k].name === 'You' ? ' class="you"' : '') + '>' +
+             '<td class="p">' + (k + 1) + '</td><td>' + rows2[k].name +
+             '</td><td></td><td class="t">' + rows2[k].pts + ' pts</td></tr>';
+    }
+    $('resTable').innerHTML += '<tr><td colspan="4" style="padding-top:12px;' +
+      'color:var(--muted);font-size:10px;letter-spacing:.16em;text-transform:uppercase">' +
+      (st.done ? 'Final standings' : 'Standings after round ' + st.round) + '</td></tr>' + tbl;
+
+    if(st.done){
+      var champPos = rows2.findIndex(function(x){ return x.name === 'You'; }) + 1;
+      var champPay = ch2.prize[champPos - 1] || 0;
+      SAVE.credits += champPay;
+      saveNow();
+      $('resTitle').textContent = champPos === 1 ? 'Champion' : 'Season over';
+      if(champPay > 0){
+        note += ' <b style="color:var(--amber)">' + money(champPay) +
+                '</b> for finishing P' + champPos + ' in the ' + ch2.name + '.';
+      }
+      $('resNote').innerHTML = note;
+    }
+  }
 
   updateMenu();
   show('ovResult');
@@ -571,7 +656,7 @@ function endDrag(order, pos){
   }
   $('resTable').innerHTML = rows;
 
-  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b> credits.';
+  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
   if(G.react !== null) note += ' Reaction ' + G.react.toFixed(3) + 's.';
   if(G.foul) note += ' You left before the green.';
   if(isBest) note += ' Your best quarter in this car.';
@@ -652,7 +737,8 @@ function wire(){
 
   $('btnGo').onclick = function(){
     var ev = pendingEvent;
-    startRace({ track: ev.track, laps: ev.laps, event: ev, field: buildField(ev) });
+    startRace({ track: ev.track, laps: ev.laps, event: ev, field: buildField(ev),
+                wager: wagerStake, odds: wagerOdds(ev) });
   };
 
   $('btnResume').onclick = togglePause;
