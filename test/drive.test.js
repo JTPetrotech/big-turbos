@@ -321,6 +321,122 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
   H.ok(Math.hypot(pair[0].x - pair[1].x, pair[0].z - pair[1].z) > 3,
        'and side by side rather than on top of each other',
        Math.hypot(pair[0].x - pair[1].x, pair[0].z - pair[1].z).toFixed(1) + ' m apart');
+
+  /* ------------------------------------------------- the README's numbers -- */
+
+  /* The README prints a table of power, weight, 0-60 and quarter-mile times
+     and claims nobody typed the times in. That claim is only true while this
+     passes. The garage preview is generated from carStats so it cannot drift;
+     a markdown table drifts silently the moment a car is retuned. So read the
+     README back and measure every figure in it again.
+
+     If this fails, the model moved and the README is now lying. Correct the
+     README - do not loosen the tolerances. */
+  console.log('\n  the README quotes the model');
+
+  const readme = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'README.md'), 'utf8');
+  const flat = readme.replace(/\s+/g, ' ');          // prose, unwrapped
+  const plain = t => parseFloat(String(t).replace(/,/g, ''));
+
+  /* | Apex A80 Twin-Turbo | 239 | 1,570 | 4.5s | 13.27s @ 102 mph | */
+  const ROW = /^\|\s*([A-Za-z][^|]*?)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|\s*([\d.]+)s\s*\|\s*([\d.]+)s @ (\d+) mph\s*\|/;
+  const quoted = readme.split(/\r?\n/).map(l => l.match(ROW)).filter(Boolean);
+  H.ok(quoted.length >= 11, 'the car table is still in the README and parses',
+       quoted.length + ' rows read');
+
+  /* Look the car up by its printed name, so there is no key-to-name map to
+     keep in step either. Rename a car and this fails loudly. */
+  const byName = {};
+  ctx.CAR_ORDER.forEach(k => { byName[ctx.CARS[k].name] = k; });
+
+  for(const row of quoted){
+    const name = row[1], key = byName[name];
+    if(!key){ H.ok(false, 'README row names a car that exists', name); continue; }
+
+    const s = ctx.carStats(key, {});                 // stock, as the table says
+    const q = quarter(key);
+    const sixty = ctx.zeroTo60(s);
+    const said = { kw: plain(row[2]), kg: plain(row[3]), sixty: plain(row[4]),
+                   et: plain(row[5]), trap: plain(row[6]) };
+
+    /* Tolerances are rounding, not slack: kW and kg are integers, 0-60 is
+       printed to a tenth, the ET to a hundredth, the trap to a whole mph. */
+    const wrong = [];
+    if(Math.abs(s.power - said.kw) > 0.5)
+      wrong.push('kW says ' + said.kw + ', is ' + s.power);
+    if(Math.abs(s.mass - said.kg) > 0.5)
+      wrong.push('kg says ' + said.kg + ', is ' + s.mass);
+    if(Math.abs(sixty - said.sixty) > 0.06)
+      wrong.push('0-60 says ' + said.sixty + 's, is ' + sixty.toFixed(2) + 's');
+    if(Math.abs(q.et - said.et) > 0.02)
+      wrong.push('ET says ' + said.et + 's, is ' + q.et.toFixed(2) + 's');
+    if(Math.abs(q.trap - said.trap) > 1)
+      wrong.push('trap says ' + said.trap + ', is ' + q.trap.toFixed(1) + ' mph');
+
+    H.ok(wrong.length === 0, name + ' is quoted correctly',
+         wrong.length ? wrong.join('; ')
+                      : said.et.toFixed(2) + 's @ ' + said.trap + ' mph');
+  }
+
+  /* A count in prose rots the same way a measurement does. */
+  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+                 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
+                 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
+                 'nineteen', 'twenty'];
+  const count = WORDS[ctx.CAR_ORDER.length] || String(ctx.CAR_ORDER.length);
+  H.ok(new RegExp(count + ' of them', 'i').test(flat),
+       'the README still says how many cars there are',
+       ctx.CAR_ORDER.length + ', written "' + count + '"');
+
+  /* The prose and the parts table quote figures out of the data tables. Same
+     problem, same fix: find the sentence, pull the number, check it. */
+  const says = (label, re, actual, tol) => {
+    const m = flat.match(re);
+    if(!m){ H.ok(false, label, 'the README no longer says this at all'); return; }
+    const said = plain(m[1]);
+    H.ok(Math.abs(said - actual) <= tol, label,
+         'README says ' + said + ', model says ' + (Math.round(actual * 100) / 100));
+  };
+
+  const shopper = ctx.carStats('hatch', {});
+  says('the hatch has the power the README gives it',
+       /because ([\d,]+) kW pushing/, shopper.power, 0.5);
+  says('and the weight', /kW pushing ([\d,]+) kg/, shopper.mass, 0.5);
+  says('and does the 0-60 it is credited with',
+       /stock hatch does 0.60 in ([\d.]+)s/, ctx.zeroTo60(shopper), 0.06);
+  says('and tops out where it says',
+       /tops out at ([\d,]+) mph/, ctx.topSpeed(shopper) * 2.23694, 1);
+
+  /* The parts table describes the top tier of each part - the expensive one
+     that buys a trade. Those percentages are read straight out of SLOTS. */
+  const top = k => { const t = ctx.slotByKey(k).tiers; return t[t.length - 1]; };
+  const bigTurbo = top('turbo'), bottle = top('nos'), sixInch = top('lift');
+
+  says('the big turbo gives what the README promises',
+       /\+(\d+)% once it is spinning/, bigTurbo.boost * 100, 0.5);
+  says('and does nothing below the speed it says',
+       /Nothing at all below (\d+) mph/, bigTurbo.lag * 2.23694, 1);
+  says('nitrous is worth what the README says',
+       /\+(\d+)% while you hold it/, bottle.nos * 100, 0.5);
+  says('and weighs what you are told you are carrying',
+       /(\d+) kg carried every lap/, bottle.mass, 0.5);
+  says('the tallest lift gives away the grip the README admits to',
+       /gives away (\d+)% of the truck/, (1 - sixInch.grip) * 100, 0.5);
+  /* The README describes that lift in prose ("a 6in lift on 37s"), so the
+     whole tier name will not appear verbatim. What must still appear are the
+     bits of it that identify which tier is meant - the height and the tyre.
+     Sell a 8in on 40s instead and this fails. */
+  const marks = sixInch.name.split(/\s+/).filter(w => /\d/.test(w));
+  const missing = marks.filter(w => flat.indexOf(w) === -1);
+  H.ok(missing.length === 0,
+       'and the README still describes the lift the game actually sells',
+       missing.length ? 'no mention of ' + missing.join(', ')
+                      : sixInch.name + ' -> ' + marks.join(' + '));
+
+  /* Free roam is quoted in kilometres across, not in WORLD_EDGE. */
+  says('the field in free roam is as big as the README makes out',
+       /the ([\d.]+) km field/, ctx.WORLD_EDGE * 2 / 1000, 0.05);
 }
 
 /* ------------------------------------------------------------ nitrous -- */

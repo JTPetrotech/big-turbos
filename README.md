@@ -174,6 +174,13 @@ to within a millimetre, that the ETs stay in the range the real cars run,
 that free roam really has no barrier but still has an edge of the world, and
 that a lift kit grips in a field where the same truck stock slides.
 
+And it reads this README back. Every figure in the car table above - power,
+weight, 0-60 and the quarter mile - is measured again from the model and
+checked against what is printed here, along with the numbers quoted in the
+prose and in the parts table. The claim that nobody typed those times in is
+only true while that passes, so it is now a test rather than a promise:
+retune a car and the suite fails until this file is corrected.
+
 `serve.js` is not part of the game — it serves the folder on
 `http://localhost:8123` so the game can be played in a browser that will not
 open a `file://` page. The game itself still opens straight from disk.
