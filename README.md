@@ -5,6 +5,11 @@ network, nothing to buy with real money.
 
 Open `index.html` and drive.
 
+The title screen and the pause menu both have a way back to The Arcade, the
+hub the games live on at `https://jtpetrotech.github.io/`. It is a plain
+`<a href>` rather than a scripted button, so the way out still works even if
+the script never runs - which is the one failure this game has actually had.
+
 (It was called Redline until it grew a drag strip. An old save is carried
 over automatically the first time you open it.)
 

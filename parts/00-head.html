@@ -157,7 +157,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 .go:disabled{opacity:.4;cursor:not-allowed}
 .mini{font-family:var(--display);font-size:17px;letter-spacing:.04em;padding:8px 13px 6px;
   border-radius:9px;border:1px solid var(--line);background:var(--panel2);
-  color:var(--text);cursor:pointer}
+  color:var(--text);cursor:pointer;text-decoration:none;display:inline-block}
 .mini:hover{border-color:var(--red)}
 .nav{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;justify-content:center}
 
@@ -271,6 +271,9 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
       <button class="mini" id="btnShowroom">Showroom</button>
       <button class="mini" id="btnPaint">Paint</button>
       <button class="mini" id="btnHelp">Controls</button>
+      <!-- A real link, not a scripted button: the way out of the game still
+           works even if the script above it never runs. -->
+      <a class="mini" id="lnkArcade" href="https://jtpetrotech.github.io/">The Arcade</a>
     </div>
     <p class="note2" id="menuNote"></p>
   </div>
@@ -365,6 +368,9 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
       <button class="go" id="btnResume">Resume</button>
       <button class="go alt" id="btnRestart">Restart</button>
       <button class="go alt" id="btnQuit">Quit</button>
+    </div>
+    <div class="nav">
+      <a class="mini" href="https://jtpetrotech.github.io/">Exit to the Arcade</a>
     </div>
   </div>
 </div>
