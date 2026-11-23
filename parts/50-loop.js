@@ -84,7 +84,11 @@ function refreshCarPreview(){
 
 function updateMenu(){
   var el = $('vCredits');
-  if(el) el.textContent = money(SAVE.credits);
+  if(el) el.textContent = freeBuild() ? 'Unlimited' : money(SAVE.credits);
+  /* "In hand: Unlimited" reads like a boast. "Money: Unlimited" reads like
+     a setting, which is what it is. */
+  var lbl = $('walletLbl');
+  if(lbl) lbl.textContent = freeBuild() ? 'Money' : 'In hand';
   var note = $('menuNote');
   if(note){
     var r = rating(statsOf(SAVE.car));
@@ -583,7 +587,10 @@ function endRace(){
   }
   $('resTable').innerHTML = rows;
 
-  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
+  /* Prize money is still earned with money switched off - you did win the
+     race - but quoting a figure next to a wallet reading "Unlimited" would
+     be noise, so the line is simply left out. */
+  var note = freeBuild() ? '' : '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
   if(bet > 0) note += ' Your bet paid <b style="color:var(--green)">' +
                       money(bet) + '</b>.';
   if(bet < 0) note += ' Your bet cost you <b style="color:var(--red)">' +
@@ -614,7 +621,7 @@ function endRace(){
       SAVE.credits += champPay;
       saveNow();
       $('resTitle').textContent = champPos === 1 ? 'Champion' : 'Season over';
-      if(champPay > 0){
+      if(champPay > 0 && !freeBuild()){
         note += ' <b style="color:var(--amber)">' + money(champPay) +
                 '</b> for finishing P' + champPos + ' in the ' + ch2.name + '.';
       }
@@ -656,7 +663,7 @@ function endDrag(order, pos){
   }
   $('resTable').innerHTML = rows;
 
-  var note = '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
+  var note = freeBuild() ? '' : '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
   if(G.react !== null) note += ' Reaction ' + G.react.toFixed(3) + 's.';
   if(G.foul) note += ' You left before the green.';
   if(isBest) note += ' Your best quarter in this car.';
@@ -719,6 +726,19 @@ function wire(){
   $('btnGarage').onclick = openGarage;
   $('btnShowroom').onclick = openShowroom;
   $('btnPaint').onclick = openPaint;
+  $('btnBench').onclick = openBench;
+  $('btnBenchBack').onclick = closeBench;
+  $('btnBenchSave').onclick = function(){
+    var res = saveKit(benchDraft);
+    if(!res.ok){ flash($('benchBody'), 'The bench is full - scrap one first.'); return; }
+    /* Saving puts it straight on the car, which is what you were looking at
+       while you built it. */
+    looksFor(SAVE.car).kit = res.index;
+    benchWas = res.index;
+    saveNow();
+    refreshCarPreview();
+    backToMenu();
+  };
   $('btnHelp').onclick = function(){ hideAll(); show('ovHelp'); drawHelp(); };
 
   $('btnGarageBack').onclick = backToMenu;

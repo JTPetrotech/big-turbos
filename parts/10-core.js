@@ -187,6 +187,8 @@ function freshSave(){
     champ: {},                 // championship id -> { round, pts, done }
     bestEt: {},                // car key -> best quarter mile
     plate: '',                 // what it says on the numberplate
+    kits: [],                  // body kits built in the Workbench
+    freeBuild: true,           // unlimited money: parts and cars cost nothing
     seen: false
   };
 }
@@ -209,7 +211,9 @@ function loadSave(){
   var f = freshSave();
   for(var k in f) if(!(k in SAVE)) SAVE[k] = f[k];
   if(!Array.isArray(SAVE.owned) || !SAVE.owned.length) SAVE.owned = ['hatch'];
-  if(SAVE.owned.indexOf(SAVE.car) === -1) SAVE.car = SAVE.owned[0];
+  /* ownsCar, not the owned list: with money switched off every car counts as
+     yours, and a save must not snap you back to the hatch on reload. */
+  if(!ownsCar(SAVE.car)) SAVE.car = SAVE.owned[0];
   if(typeof SAVE.credits !== 'number' || !isFinite(SAVE.credits)) SAVE.credits = 0;
   return SAVE;
 }
@@ -230,9 +234,14 @@ function hide(id){
   var el = $(id);
   if(el) el.classList.remove('on');
 }
-var ALL_OVS = ['ovMenu','ovGarage','ovShow','ovPaint','ovEvents','ovGrid',
-               'ovResult','ovPause','ovHelp'];
-function hideAll(){ ALL_OVS.forEach(hide); }
+/* Every overlay in the document, found rather than listed. This was a
+   hardcoded array of ids, and adding one screen without remembering to add
+   it here left that screen sitting on top of the menu after it closed - the
+   kind of list that is only ever wrong once you have stopped looking at it. */
+function hideAll(){
+  var ovs = document.querySelectorAll('.ov');
+  for(var i = 0; i < ovs.length; i++) ovs[i].classList.remove('on');
+}
 
 /* A phone or a tablet gets the touch pads; everything else does not, because
    on a desktop they only cover up the road. */

@@ -413,10 +413,21 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
   const top = k => { const t = ctx.slotByKey(k).tiers; return t[t.length - 1]; };
   const bigTurbo = top('turbo'), bottle = top('nos'), sixInch = top('lift');
 
-  says('the big turbo gives what the README promises',
+  says('the biggest turbo gives what the README promises',
        /\+(\d+)% once it is spinning/, bigTurbo.boost * 100, 0.5);
   says('and does nothing below the speed it says',
        /Nothing at all below (\d+) mph/, bigTurbo.lag * 2.23694, 1);
+
+  /* The supercharger is the one induction option the table describes by name
+     rather than by being the top of the list, so look it up the same way. */
+  const blown = ctx.slotByKey('turbo').tiers.filter(t => t.lag === 0 && t.boost > 0)[0];
+  if(!blown) H.ok(false, 'there is still a supercharger to check');
+  else {
+    says('the supercharger gives what the README promises',
+         /\+(\d+)% from a standstill/, blown.boost * 100, 0.5);
+    says('and weighs what the README admits',
+         /and (\d+) kg of it/, blown.mass, 0.5);
+  }
   says('nitrous is worth what the README says',
        /\+(\d+)% while you hold it/, bottle.nos * 100, 0.5);
   says('and weighs what you are told you are carrying',

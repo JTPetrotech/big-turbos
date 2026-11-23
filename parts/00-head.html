@@ -256,8 +256,8 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
   <div class="card">
     <h1>BIG<em>TURBOS</em></h1>
     <p class="sub" style="text-align:center">Arcade racing with a garage that matters.
-      Win money, buy parts, feel the car change underneath you.</p>
-    <div id="wallet"><span>In hand</span><b id="vCredits">$0</b></div>
+      Every expensive part is a trade. Build the car, feel it change underneath you.</p>
+    <div id="wallet"><span id="walletLbl">In hand</span><b id="vCredits">$0</b></div>
     <div class="btns">
       <button class="go" id="btnCareer">Career</button>
       <button class="go alt" id="btnQuick">Quick race</button>
@@ -270,6 +270,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
       <button class="mini" id="btnGarage">Garage</button>
       <button class="mini" id="btnShowroom">Showroom</button>
       <button class="mini" id="btnPaint">Paint</button>
+      <button class="mini" id="btnBench">Workbench</button>
       <button class="mini" id="btnHelp">Controls</button>
       <!-- A real link, not a scripted button: the way out of the game still
            works even if the script above it never runs. -->
@@ -311,6 +312,20 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <p class="sub">Free, all of it. Nothing here changes how the car drives.</p>
     <div id="paintBody"></div>
     <div class="btns"><button class="go alt" id="btnPaintBack">Back</button></div>
+  </div>
+</div>
+
+<!-- the workbench: build your own body kit -->
+<div class="ov" id="ovBench">
+  <div class="card">
+    <h2>The Workbench</h2>
+    <p class="sub">Build a body kit a piece at a time. All of it is shape and
+      none of it is grip &mdash; nothing here changes how the car drives.</p>
+    <div id="benchBody"></div>
+    <div class="btns">
+      <button class="go" id="btnBenchSave">Save it to the garage</button>
+      <button class="go alt" id="btnBenchBack">Back</button>
+    </div>
   </div>
 </div>
 

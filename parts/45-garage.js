@@ -153,8 +153,8 @@ function isTruck(carKey){
 /* Showroom order, and the order the AI picks from. Sorted by rating, which
    the tests enforce - a showroom that is not in order is a showroom that
    lies about which car is the step up. */
-var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'gtr', 'rx', 'muscle', 'evo',
-                 'rally', 'hellwagon', 'a90', 'rear', 'hellsedan', 'hellcoupe',
+var CAR_ORDER = ['hatch', 'coupe', 'trx', 'muscle', 'a80', 'gtr', 'rx', 'rally',
+                 'evo', 'hellwagon', 'a90', 'hellsedan', 'rear', 'hellcoupe',
                  'super', 'proto'];
 
 /* ----------------------------------------------------------------- parts -- */
@@ -177,7 +177,13 @@ var SLOTS = [
     tiers: [
       { name: 'None', cost: 0, boost: 0, lag: 0, mass: 0, d: 'Natural aspiration. Instant, if modest.' },
       { name: 'Small turbo', cost: 7800, boost: 0.18, lag: 14, mass: 16, d: '+18% up top. Comes in early, around 30 mph.' },
-      { name: 'Big turbo', cost: 21000, boost: 0.42, lag: 26, mass: 24, d: '+42%, but nothing happens below 58 mph.' }
+      { name: 'Supercharger', cost: 12500, boost: 0.30, lag: 0, mass: 38,
+        d: '+30% from a standstill. Belt driven, so there is no waiting for it - and no more of it higher up either. 38 kg.' },
+      { name: 'Big turbo', cost: 21000, boost: 0.42, lag: 26, mass: 24, d: '+42%, but nothing happens below 58 mph.' },
+      { name: 'Twin turbo', cost: 34000, boost: 0.56, lag: 18, mass: 31,
+        d: '+56%, and the little one lights first, so it is all there by 40 mph.' },
+      { name: 'Quad turbo', cost: 58000, boost: 0.74, lag: 31, mass: 52,
+        d: '+74% once all four are lit, which is not until 69 mph. 52 kg of plumbing you carry everywhere, including round corners.' }
     ]
   },
   {
@@ -487,7 +493,12 @@ function gripAt(s, v){ return s.grip + s.down * v * v / 1000; }
    weight and grip, then brakes. */
 function rating(s){
   var pw = (s.power * 1000) / s.mass;             // W/kg
-  var r = pw * 1.65 + s.grip * 170 + s.brake * 8.5 + topSpeed(s) * 0.9 +
+  /* Boost is a multiplier on power, so it is worth a share of the power term
+     rather than a flat bonus - and only a share, because it does nothing at
+     all below `lag`. Without this a quad turbo is free rating: the car stays
+     in class D on paper and walks every event in it. */
+  var r = pw * 1.65 * (1 + 0.7 * (s.boost || 0)) +
+          s.grip * 170 + s.brake * 8.5 + topSpeed(s) * 0.9 +
           (s.nos || 0) * 55 + (s.launch ? (s.launch - 1) * 90 : 0);
   return Math.round(r);
 }
@@ -519,10 +530,31 @@ function summary(carKey, parts){
 
 /* ------------------------------------------------------------ buying kit -- */
 
+/* Unlimited money, on by default. The garage is the game, and the point of it
+   is trying combinations rather than saving up for them.
+
+   Switching it off puts the earning game back whole: prices, prize money, and
+   the side bet that is the only way the number ever goes down. Nothing fitted
+   while it is on is recorded as bought, so switching it off hands you the
+   garage you actually paid for rather than everything you tried for free. */
+function freeBuild(){ return SAVE.freeBuild !== false; }
+
 function partCost(slotKey, tier){
+  if(freeBuild()) return 0;
   var slot = slotByKey(slotKey);
   if(!slot || !slot.tiers[tier]) return 0;
   return slot.tiers[tier].cost;
+}
+
+/* The sticker price, whether or not anyone is being asked to pay it. The
+   showroom still shows what a car is worth with money switched off. */
+function listPrice(carKey){
+  var car = CARS[carKey];
+  return car ? car.price : 0;
+}
+
+function ownsCar(carKey){
+  return freeBuild() || SAVE.owned.indexOf(carKey) !== -1;
 }
 
 /* Parts are bought outright, not rented, and fitting a cheaper one back is
@@ -534,6 +566,9 @@ function ownsPart(carKey, slotKey, tier){
 }
 
 function buyPart(carKey, slotKey, tier){
+  /* Money off: fitting is all that happens. Nothing spent, nothing recorded. */
+  if(freeBuild()){ fitPart(carKey, slotKey, tier); return { ok: true, free: true }; }
+
   var cost = partCost(slotKey, tier);
   if(ownsPart(carKey, slotKey, tier)) return { ok: true, already: true };
   if(SAVE.credits < cost) return { ok: false, why: 'not enough credits' };
@@ -549,7 +584,8 @@ function buyPart(carKey, slotKey, tier){
 }
 
 function fitPart(carKey, slotKey, tier){
-  if(!ownsPart(carKey, slotKey, tier)) return false;
+  if(!freeBuild() && !ownsPart(carKey, slotKey, tier)) return false;
+  if(!slotFits(slotKey, carKey)) return false;
   partsFor(carKey)[slotKey] = tier;
   saveNow();
   return true;
@@ -558,6 +594,10 @@ function fitPart(carKey, slotKey, tier){
 function buyCar(carKey){
   var car = CARS[carKey];
   if(!car) return { ok: false, why: 'no such car' };
+  /* Money off: every car is simply available, and taking one records nothing.
+     Switch the earning game back on and the showroom is as you left it. */
+  if(freeBuild()){ SAVE.car = carKey; saveNow(); return { ok: true, free: true }; }
+
   if(SAVE.owned.indexOf(carKey) !== -1) return { ok: true, already: true };
   if(SAVE.credits < car.price) return { ok: false, why: 'not enough credits' };
   SAVE.credits -= car.price;
@@ -601,6 +641,93 @@ var KITS = [
   { n: 'Wide arch', arch: 0.09, splitter: 0.16 },
   { n: 'Full wide-body', arch: 0.15, splitter: 0.34 }
 ];
+
+/* ------------------------------------------------------- the Workbench -- */
+
+/* The four above are off the shelf. The Workbench is where you make your own:
+   pick each piece, name it, and it joins the list for every car you own.
+
+   Every component here is geometry and nothing else. None of it reaches
+   carStats, and there is a test that holds that line - a body kit that
+   quietly added grip would make the whole garage a liar. */
+
+var BENCH_PARTS = [
+  { key: 'splitter', name: 'Front splitter', d: 'How far it juts out under the nose.',
+    steps: [{ n: 'None', v: 0 }, { n: 'Lip', v: 0.14 },
+            { n: 'Deep', v: 0.28 }, { n: 'Full tray', v: 0.42 }] },
+  { key: 'arch', name: 'Arches', d: 'How much wider it sits over the wheels.',
+    steps: [{ n: 'Standard', v: 0 }, { n: 'Flared', v: 0.05 },
+            { n: 'Wide', v: 0.10 }, { n: 'Full wide-body', v: 0.16 }] },
+  { key: 'skirt', name: 'Side skirts', d: 'How low it runs between the wheels.',
+    steps: [{ n: 'None', v: 0 }, { n: 'Subtle', v: 0.04 }, { n: 'Deep', v: 0.08 }] },
+  { key: 'wing', name: 'Wing', d: 'What is bolted to the back of it.',
+    steps: [{ n: 'None', v: 0 }, { n: 'Ducktail', v: 1 },
+            { n: 'Deck wing', v: 2 }, { n: 'Swan-neck GT', v: 3 }] },
+  { key: 'scoop', name: 'Scoop', d: 'Where it takes its air from.',
+    steps: [{ n: 'None', v: 0 }, { n: 'Bonnet', v: 1 }, { n: 'Roof', v: 2 }] }
+];
+
+var MAX_KITS = 12;          // enough to play with, small enough to save
+
+function newKit(){
+  var k = { n: '' };
+  for(var i = 0; i < BENCH_PARTS.length; i++) k[BENCH_PARTS[i].key] = 0;
+  return k;
+}
+
+/* Which step a kit is on for one component. Values come out of the steps, so
+   an exact match is the normal case; the nearest is a fallback for a kit
+   saved before a step list changed under it. */
+function benchStep(kit, part){
+  var best = 0, gap = Infinity;
+  for(var i = 0; i < part.steps.length; i++){
+    var d = Math.abs((kit[part.key] || 0) - part.steps[i].v);
+    if(d < gap){ gap = d; best = i; }
+  }
+  return best;
+}
+
+/* Presets first, then everything built in the Workbench, in one index space -
+   so `looks.kit` keeps meaning exactly what it always meant. */
+function allKits(){
+  return KITS.concat((SAVE && SAVE.kits) || []);
+}
+function kitAt(i){
+  var all = allKits();
+  return all[i || 0] || all[0];
+}
+function isCustomKit(i){ return (i || 0) >= KITS.length; }
+
+function saveKit(kit){
+  if(!SAVE.kits) SAVE.kits = [];
+  if(SAVE.kits.length >= MAX_KITS) return { ok: false, why: 'the bench is full' };
+  var made = newKit();
+  for(var i = 0; i < BENCH_PARTS.length; i++){
+    var key = BENCH_PARTS[i].key;
+    made[key] = kit[key] || 0;
+  }
+  made.n = (kit.n || '').trim().slice(0, 22) || ('Kit ' + (SAVE.kits.length + 1));
+  SAVE.kits.push(made);
+  saveNow();
+  return { ok: true, index: KITS.length + SAVE.kits.length - 1 };
+}
+
+/* Deleting one shifts every later kit down an index, so any car wearing one
+   of those has to be walked back or it silently changes clothes. */
+function deleteKit(index){
+  if(!isCustomKit(index)) return false;
+  var at = index - KITS.length;
+  if(!SAVE.kits || !SAVE.kits[at]) return false;
+  SAVE.kits.splice(at, 1);
+  for(var carKey in SAVE.looks){
+    var l = SAVE.looks[carKey];
+    if(!l || typeof l.kit !== 'number') continue;
+    if(l.kit === index) l.kit = 0;
+    else if(l.kit > index) l.kit -= 1;
+  }
+  saveNow();
+  return true;
+}
 
 var WHEEL_SIZES = [
   { n: 'Stock', d: 0 }, { n: 'Plus one', d: 0.025 },

@@ -11,6 +11,40 @@
 var garageSlot = 'engine';       // which tab is open
 var garagePreview = null;        // {slot, tier} being hovered
 
+/* Kit names are typed by whoever is playing and then go into innerHTML. It is
+   their own browser and nobody else's, but a name with a < in it should make
+   a kit with a < in its name, not a broken screen. */
+function esc(s){
+  return String(s === undefined || s === null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* One line about money, printed wherever money is discussed, with the switch
+   sitting right next to it rather than buried in a settings screen. */
+function walletLine(){
+  var btn = '<button class="mini" id="btnMoneyMode" style="font-size:13px;' +
+            'padding:4px 10px;margin-left:8px;vertical-align:middle">' +
+            (freeBuild() ? 'Make me earn it' : 'Unlimited') + '</button>';
+  var said = freeBuild()
+    ? '<b style="color:var(--amber)">Money: unlimited</b>'
+    : '<b style="color:var(--amber)">' + money(SAVE.credits) + '</b> in hand.';
+  return said + btn;
+}
+
+/* Wire whichever copy of the switch is on screen. Flipping it redraws the
+   screen that drew it, because every price on it has just changed. */
+function wireMoneyMode(redraw){
+  var b = $('btnMoneyMode');
+  if(!b) return;
+  b.onclick = function(){
+    SAVE.freeBuild = !freeBuild();
+    saveNow();
+    updateMenu();
+    if(redraw) redraw();
+  };
+}
+
 /* The ranges each bar is drawn against. Not the min and max of what exists -
    a bit of headroom at each end so a stock car does not read as empty and a
    fully built one does not peg everything. */
@@ -106,8 +140,7 @@ function drawGarage(){
   var parts = partsFor(carKey);
 
   $('gName').textContent = car.name;
-  $('gSub').innerHTML = car.desc + '<br><b style="color:var(--amber)">' +
-    money(SAVE.credits) + '</b> credits in hand.';
+  $('gSub').innerHTML = car.desc + '<br>' + walletLine();
 
   var preview = null;
   if(garagePreview){
@@ -150,9 +183,10 @@ function drawGarage(){
 
   for(var t = 0; t < slot.tiers.length; t++){
     var tier = slot.tiers[t];
-    var owned = ownsPart(carKey, garageSlot, t);
+    var free = freeBuild();
+    var owned = free || ownsPart(carKey, garageSlot, t);
     var isFitted = t === fittedTier;
-    var afford = SAVE.credits >= tier.cost;
+    var afford = free || SAVE.credits >= tier.cost;
 
     var cost;
     if(isFitted) cost = '<span class="cost have">Fitted</span>';
@@ -160,8 +194,10 @@ function drawGarage(){
     else if(afford) cost = '<span class="cost">' + money(tier.cost) + '</span>';
     else cost = '<span class="cost cant">' + money(tier.cost) + '</span>';
 
+    /* With money off, "Owned" is not a thing any more - everything is to
+       hand, so a chip saying so on every row is just noise. */
     var marks = (isFitted ? '<span class="chip" style="color:var(--green)">On the car</span>' : '') +
-                (!isFitted && owned ? '<span class="chip">Owned</span>' : '');
+                (!isFitted && owned && !free ? '<span class="chip">Owned</span>' : '');
 
     html += '<div class="row' + (t === selTier ? ' on' : '') +
             (!owned && !afford ? ' locked' : '') + '" data-tier="' + t + '">' +
@@ -175,7 +211,7 @@ function drawGarage(){
      shows what it would do to the car; a second, deliberate press is what
      spends the money. A list where a mis-tap costs $38,000 is not a
      shop, it is a trap - and on a phone there is no hover to preview with. */
-  var selOwned = ownsPart(carKey, garageSlot, selTier);
+  var selOwned = freeBuild() || ownsPart(carKey, garageSlot, selTier);
   var selCost = slot.tiers[selTier].cost;
   var label, action = null;
   if(selTier === fittedTier) label = 'Already on the car';
@@ -219,6 +255,8 @@ function drawGarage(){
       refreshCarPreview();
     };
   }
+
+  wireMoneyMode(function(){ garagePreview = null; drawGarage(); });
 }
 
 function fromSlot(slotKey, tier){ var o = {}; o[slotKey] = tier; return o; }
@@ -238,17 +276,16 @@ function openShowroom(){
 }
 
 function drawShowroom(){
-  var html = '<p class="note2"><b style="color:var(--amber)">' + money(SAVE.credits) +
-             '</b> in hand.</p>';
+  var html = '<p class="note2">' + walletLine() + '</p>';
 
   for(var i = 0; i < CAR_ORDER.length; i++){
     var key = CAR_ORDER[i];
     var car = CARS[key];
-    var owned = SAVE.owned.indexOf(key) !== -1;
+    var owned = ownsCar(key);
     var driving = SAVE.car === key;
     var s = carStats(key, owned ? partsFor(key) : {});
     var r = rating(s);
-    var afford = SAVE.credits >= car.price;
+    var afford = freeBuild() || SAVE.credits >= car.price;
 
     var right;
     if(driving) right = '<span class="cost have">Driving</span>';
@@ -271,7 +308,7 @@ function drawShowroom(){
   Array.prototype.forEach.call($('showList').querySelectorAll('.row'), function(row){
     var key = row.getAttribute('data-car');
     row.onclick = function(){
-      if(SAVE.owned.indexOf(key) !== -1){
+      if(ownsCar(key)){
         SAVE.car = key;
         saveNow();
       } else {
@@ -282,6 +319,8 @@ function drawShowroom(){
       refreshCarPreview();
     };
   });
+
+  wireMoneyMode(function(){ drawShowroom(); refreshCarPreview(); });
 }
 
 /* -------------------------------------------------------------- the looks -- */
@@ -290,6 +329,125 @@ function openPaint(){
   hideAll();
   show('ovPaint');
   drawPaint();
+}
+
+/* ---------------------------------------------------------- the Workbench -- */
+
+/* The draft on the bench. It is put straight onto the car you are looking at
+   while you work, so every change is visible on the thing itself rather than
+   in a list - which is the whole point of a bench. The car's real kit is put
+   back if you leave without saving. */
+var benchDraft = null;
+var benchWas = 0;
+
+function openBench(){
+  hideAll();
+  show('ovBench');
+  benchDraft = newKit();
+  benchWas = looksFor(SAVE.car).kit || 0;
+  drawBench();
+}
+
+function closeBench(){
+  /* Leaving without saving puts the car back in what it was wearing. */
+  looksFor(SAVE.car).kit = benchWas;
+  benchDraft = null;
+  saveNow();
+  refreshCarPreview();
+  backToMenu();
+}
+
+/* The draft is shown by parking it at the end of the kit list and pointing
+   the car at it, so the preview uses exactly the same path a saved kit does.
+   No second rendering route means no way for the preview to lie. */
+function previewDraft(){
+  if(!SAVE.kits) SAVE.kits = [];
+  var at = KITS.length + SAVE.kits.length;      // one past the end
+  SAVE.kits.push(benchDraft);
+  looksFor(SAVE.car).kit = at;
+  refreshCarPreview();
+  SAVE.kits.pop();                              // it is a draft, not a kit
+}
+
+function drawBench(){
+  var html = '';
+
+  for(var i = 0; i < BENCH_PARTS.length; i++){
+    var part = BENCH_PARTS[i];
+    var on = benchStep(benchDraft, part);
+    html += '<h2 style="font-size:20px;margin-top:16px">' + part.name + '</h2>' +
+            '<p class="note2" style="margin:0 0 7px">' + part.d + '</p>' +
+            '<div class="nav" style="justify-content:flex-start">';
+    for(var s = 0; s < part.steps.length; s++){
+      html += '<button class="mini' + (s === on ? ' hot' : '') +
+              '" data-part="' + part.key + '" data-v="' + part.steps[s].v + '"' +
+              (s === on ? ' style="border-color:var(--red);color:var(--text)"' : '') +
+              '>' + part.steps[s].n + '</button>';
+    }
+    html += '</div>';
+  }
+
+  var mine = (SAVE.kits || []).length;
+  html += '<h2 style="font-size:20px;margin-top:18px">Name it</h2>' +
+          '<input id="benchName" maxlength="22" value="' + esc(benchDraft.n) +
+          '" placeholder="Widebody mk1" style="width:100%;box-sizing:border-box;' +
+          'padding:10px 13px;font-family:var(--display);font-size:20px;letter-spacing:.06em;' +
+          'background:var(--panel2);color:var(--text);border:1px solid var(--line);' +
+          'border-radius:10px">' +
+          '<p class="note2" style="margin-top:7px">' + mine + ' of ' + MAX_KITS +
+          ' slots on the bench used.</p>';
+
+  if(mine){
+    html += '<h2 style="font-size:20px;margin-top:18px">Already built</h2><div id="benchMine">';
+    for(var m = 0; m < SAVE.kits.length; m++){
+      var idx = KITS.length + m;
+      html += '<div class="row"><div class="grow"><div class="t">' +
+              esc(SAVE.kits[m].n) + '</div><div class="d">' + kitWords(SAVE.kits[m]) +
+              '</div></div>' +
+              '<span class="cost cant" data-del="' + idx + '" ' +
+              'style="cursor:pointer">Scrap it</span></div>';
+    }
+    html += '</div>';
+  }
+
+  $('benchBody').innerHTML = html;
+
+  Array.prototype.forEach.call($('benchBody').querySelectorAll('[data-part]'), function(b){
+    b.onclick = function(){
+      benchDraft[b.getAttribute('data-part')] = parseFloat(b.getAttribute('data-v'));
+      drawBench();
+      previewDraft();
+    };
+  });
+
+  Array.prototype.forEach.call($('benchBody').querySelectorAll('[data-del]'), function(b){
+    b.onclick = function(){
+      var idx = parseInt(b.getAttribute('data-del'), 10);
+      /* Deleting shifts the kits after it down one, and benchWas is an index
+         into that same list, so it has to move with them. */
+      if(benchWas === idx) benchWas = 0;
+      else if(benchWas > idx) benchWas -= 1;
+      deleteKit(idx);
+      drawBench();
+      previewDraft();
+    };
+  });
+
+  var nameIn = $('benchName');
+  if(nameIn) nameIn.oninput = function(){ benchDraft.n = nameIn.value; };
+
+  previewDraft();
+}
+
+/* What a kit is, in words, for the list of ones already built. */
+function kitWords(kit){
+  var bits = [];
+  for(var i = 0; i < BENCH_PARTS.length; i++){
+    var part = BENCH_PARTS[i];
+    var step = benchStep(kit, part);
+    if(step > 0) bits.push(part.steps[step].n.toLowerCase() + ' ' + part.name.toLowerCase());
+  }
+  return bits.length ? bits.join(', ') : 'nothing on it at all';
 }
 
 function drawPaint(){
@@ -323,17 +481,28 @@ function drawPaint(){
   }
   html += '</div>';
 
-  html += '<div class="row' + (l.spoiler ? ' on' : '') + '" data-k="spoiler" style="margin-top:16px">' +
+  /* A kit built on the Workbench says what wing the car has, so while one of
+     those is on, this toggle has nothing to do. Say so rather than letting it
+     look broken. */
+  var kitWing = (kitAt(l.kit || 0).wing || 0) > 0;
+  html += '<div class="row' + (l.spoiler && !kitWing ? ' on' : '') + '" data-k="spoiler" style="margin-top:16px">' +
           '<div class="grow"><div class="t">Spoiler</div>' +
           '<div class="d">Bolted to the bootlid. Does nothing at all for grip — ' +
-          'that is what the aero in the garage is for.</div></div>' +
-          '<span class="cost have">' + (l.spoiler ? 'On' : 'Off') + '</span></div>';
+          'that is what the aero in the garage is for.' +
+          (kitWing ? ' Your body kit is already carrying its own wing, so this ' +
+                     'is doing nothing right now.' : '') +
+          '</div></div>' +
+          '<span class="cost have">' + (kitWing ? 'Overridden' : (l.spoiler ? 'On' : 'Off')) +
+          '</span></div>';
 
+  /* Presets and anything built on the Workbench, in one list. */
+  var kits = allKits();
   html += '<h2 style="font-size:22px;margin-top:16px">Body kit</h2><div id="kitRows">';
-  for(var kk = 0; kk < KITS.length; kk++){
+  for(var kk = 0; kk < kits.length; kk++){
     html += '<div class="row' + (l.kit === kk ? ' on' : '') + '" data-k="kit" data-i="' + kk +
-            '"><div class="grow"><div class="t">' + KITS[kk].n + '</div></div>' +
-            '<span class="cost have">' + (l.kit === kk ? 'On' : 'Fit') + '</span></div>';
+            '"><div class="grow"><div class="t">' + esc(kits[kk].n) + '</div>' +
+            (isCustomKit(kk) ? '<div class="d">Yours, off the Workbench.</div>' : '') +
+            '</div><span class="cost have">' + (l.kit === kk ? 'On' : 'Fit') + '</span></div>';
   }
   html += '</div>';
 
@@ -546,6 +715,16 @@ function fieldRating(ev){
 }
 
 function renderWager(ev){
+  /* A bet you cannot lose is not a bet. With money unlimited there is nothing
+     to stake, so the box goes away rather than sitting there pretending. */
+  var box = $('wagerBox');
+  if(freeBuild()){
+    wagerStake = 0;
+    if(box) box.hidden = true;
+    return;
+  }
+  if(box) box.hidden = false;
+
   var odds = wagerOdds(ev);
   if(wagerStake > SAVE.credits) wagerStake = 0;
 

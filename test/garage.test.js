@@ -21,8 +21,15 @@ H.run(ctx, H.grab(gar, [
   'slotByKey', 'partsFor', 'tierOf', 'carStats', 'statsOf', 'rollingForce',
   'driveForce', 'tractionLimit', 'dragForce', 'dragLimited', 'topSpeed',
   'forceAt', 'zeroTo60', 'gripAt', 'rating', 'classOf', 'summary',
-  'partCost', 'eventOpen'
+  'partCost', 'eventOpen',
+  'freeBuild', 'listPrice', 'ownsCar', 'ownsPart', 'buyPart', 'fitPart', 'buyCar',
+  'newKit', 'benchStep', 'allKits', 'kitAt', 'isCustomKit', 'saveKit', 'deleteKit'
 ]));
+H.run(ctx, H.grabVar(gar, ['BENCH_PARTS']));
+/* grabVar lifts tables, not plain numbers, so this one is read out of the
+   source rather than typed here as well. Change it in the game and the test
+   follows; type it twice and it rots. */
+H.run(ctx, 'var MAX_KITS = ' + Number(/var MAX_KITS\s*=\s*(\d+)/.exec(gar)[1]) + ';');
 
 const { carStats, topSpeed, zeroTo60, rating, classOf, gripAt, summary } = ctx;
 const MPH = 2.23694;
@@ -127,18 +134,46 @@ H.ok(light.stability < base.stability * 0.9,
      'and is measurably more nervous with it',
      'stability ' + light.stability.toFixed(2) + ' vs ' + base.stability.toFixed(2));
 
-/* Turbo: nothing below the threshold, a lot above it.
-   Compared as acceleration rather than force, because a turbo adds 24 kg and
+/* Induction: nothing below the threshold, a lot above it.
+   Compared as acceleration rather than force, because induction adds mass and
    more mass means more traction - which raises the force a car can put down
-   while leaving what it does with it exactly the same. */
-const turbo = carStats('coupe', { turbo: 2 });
+   while leaving what it does with it exactly the same.
+
+   Every tier is checked against its own `lag` rather than one hardcoded tier
+   index. The index version of this test silently changed meaning the moment a
+   new option was slotted in above it, and passed while checking the wrong
+   part. A supercharger has no lag at all, so it gets the opposite check. */
 const accel = (s, v) => ctx.driveForce(s, v) / s.mass;
-H.ok(accel(turbo, 10) <= accel(base, 10) + 1e-9,
-     'a big turbo does nothing at walking pace',
-     accel(turbo, 10).toFixed(3) + ' vs ' + accel(base, 10).toFixed(3) + ' m/s^2');
-H.ok(accel(turbo, 45) > accel(base, 45) * 1.2,
-     'and a great deal once it is spinning',
-     '+' + Math.round((accel(turbo, 45) / accel(base, 45) - 1) * 100) + '%');
+ctx.slotByKey('turbo').tiers.forEach((tier, i) => {
+  if(i === 0) return;                                  // stock, nothing fitted
+  const s = carStats('coupe', { turbo: i });
+  const up = Math.max(tier.lag + 20, 22);              // comfortably spinning
+
+  if(tier.lag > 0){
+    const low = tier.lag * 0.6;
+    H.ok(accel(s, low) <= accel(base, low) + 1e-9,
+         tier.name + ' gives nothing below the speed it comes in at',
+         'at ' + Math.round(low * MPH) + ' mph');
+  } else {
+    H.ok(accel(s, 10) > accel(base, 10) - 1e-9,
+         tier.name + ' has nothing to wait for',
+         'pulls from a standstill');
+  }
+
+  H.ok(accel(s, up) > accel(base, up) * 1.1,
+       'and ' + tier.name + ' is worth real acceleration once it is on',
+       '+' + Math.round((accel(s, up) / accel(base, up) - 1) * 100) +
+       '% at ' + Math.round(up * MPH) + ' mph');
+});
+
+/* The point of the supercharger is that it trades peak for immediacy, so it
+   must not also be the most powerful thing on the shelf. */
+const blown = ctx.slotByKey('turbo').tiers.filter(t => t.lag === 0 && t.boost > 0)[0];
+const biggest = ctx.slotByKey('turbo').tiers.reduce((a, b) => b.boost > a.boost ? b : a);
+H.ok(blown && blown.boost < biggest.boost,
+     'the supercharger buys its immediacy with peak power',
+     blown ? '+' + Math.round(blown.boost * 100) + '% against ' +
+             biggest.name + ' at +' + Math.round(biggest.boost * 100) + '%' : 'none found');
 
 /* --------------------------------------------------- a full build is a leap -- */
 
@@ -234,14 +269,89 @@ console.log('\n  differential, clutch and nitrous');
 
 console.log('\n  the looks change nothing');
 {
+  /* Looks live in SAVE.looks, never in parts, so carStats cannot see them.
+     This is the test that keeps it that way, and it only works if it
+     actually puts a kit on the car: the version before this one compared
+     carStats('rx', {}) with carStats('rx', {}) and never set anything, so it
+     was true no matter what a kit did. */
   const plain = carStats('rx', {});
-  for(let k = 0; k < ctx.KITS.length; k++){
-    /* Looks live in SAVE.looks, not in parts, so carStats cannot see them at
-       all - this is the test that keeps it that way. */
-    const keys = Object.keys(plain);
-    const same = keys.every(key => Math.abs(plain[key] - carStats('rx', {})[key]) < 1e-9);
-    H.ok(same, 'body kit ' + ctx.KITS[k].n + ' leaves the car untouched');
+  const keys = Object.keys(plain);
+  const untouched = () => keys.every(k =>
+    Math.abs(plain[k] - carStats('rx', {})[k]) < 1e-9);
+
+  const kits = ctx.allKits();
+  for(let k = 0; k < kits.length; k++){
+    ctx.SAVE.looks.rx = { paint: 3, wheel: 2, stripe: 1, spoiler: true, kit: k, size: 3 };
+    H.ok(untouched(), 'body kit ' + kits[k].n + ' leaves the car untouched');
   }
+
+  /* And the most extreme thing the Workbench can produce - every component
+     wound all the way up. If a kit is ever quietly given a stat, it will be
+     this one. */
+  const maxed = ctx.newKit();
+  ctx.BENCH_PARTS.forEach(p => { maxed[p.key] = p.steps[p.steps.length - 1].v; });
+  maxed.n = 'Everything at once';
+  const made = ctx.saveKit(maxed);
+  H.ok(made.ok && ctx.isCustomKit(made.index),
+       'a kit built on the Workbench saves and lands past the presets',
+       'index ' + made.index);
+
+  ctx.SAVE.looks.rx = { kit: made.index };
+  H.ok(untouched(), 'and the wildest kit the bench can make is still only shape');
+  H.ok(ctx.kitAt(made.index).n === 'Everything at once',
+       'the kit list serves it back by the index it was given');
+
+  ctx.SAVE.looks.rx = {};
+}
+
+/* ------------------------------------------------------- the Workbench -- */
+
+console.log('\n  the Workbench');
+{
+  ctx.SAVE.kits = [];
+  ctx.SAVE.looks = {};
+
+  /* Every component has an off position, and it has to be first - a new kit
+     starts as nothing at all rather than as a wing you did not ask for. */
+  const blank = ctx.newKit();
+  ctx.BENCH_PARTS.forEach(p => {
+    H.ok(p.steps[0].v === 0, p.name + ' starts at nothing');
+    H.ok((blank[p.key] || 0) === 0, 'and a new kit has no ' + p.name.toLowerCase());
+    H.ok(ctx.benchStep(blank, p) === 0, 'and reads back as off');
+  });
+
+  /* A name is never required of anyone, so one gets made up. */
+  const unnamed = ctx.saveKit(ctx.newKit());
+  H.ok(unnamed.ok && ctx.kitAt(unnamed.index).n.length > 0,
+       'a kit saved without a name still gets one', ctx.kitAt(unnamed.index).n);
+
+  /* The bench is finite, and says so rather than silently dropping one. */
+  while(ctx.SAVE.kits.length < ctx.MAX_KITS) ctx.saveKit(ctx.newKit());
+  const full = ctx.saveKit(ctx.newKit());
+  H.ok(!full.ok, 'a full bench refuses rather than losing one', full.why || '');
+  H.ok(ctx.SAVE.kits.length === ctx.MAX_KITS, 'and holds exactly what it said it would',
+       ctx.MAX_KITS + '');
+
+  /* Scrapping one shifts every later kit down an index. Any car wearing one
+     of those has to come with it, or it silently changes clothes. */
+  ctx.SAVE.kits = [];
+  const a = ctx.saveKit({ n: 'A', wing: 3 }).index;
+  const b = ctx.saveKit({ n: 'B', wing: 2 }).index;
+  const c = ctx.saveKit({ n: 'C', wing: 1 }).index;
+  ctx.SAVE.looks = { hatch: { kit: a }, coupe: { kit: b }, rx: { kit: c } };
+
+  ctx.deleteKit(b);
+  H.ok(ctx.SAVE.looks.hatch.kit === a, 'scrapping a kit leaves earlier ones alone');
+  H.ok(ctx.SAVE.looks.coupe.kit === 0,
+       'the car that was wearing it goes back to standard');
+  H.ok(ctx.kitAt(ctx.SAVE.looks.rx.kit).n === 'C',
+       'and a car wearing a later one still has the same kit on it',
+       'index ' + ctx.SAVE.looks.rx.kit);
+
+  H.ok(!ctx.deleteKit(0), 'the presets cannot be scrapped');
+
+  ctx.SAVE.kits = [];
+  ctx.SAVE.looks = {};
 }
 
 /* --------------------------------------------------- championships -- */
@@ -418,6 +528,63 @@ console.log('\n  the championships');
          'says ' + said + ' hp, has ' + Math.round(real) + ' hp');
   }
   H.ok(hundreds > 0, 'and that check found a car to run on', hundreds + ' of them');
+}
+
+/* ------------------------------------------------------------- the money -- */
+
+/* Unlimited money is how the game ships, and it has to mean two separate
+   things: nothing has a price, and nothing taken for free is recorded as
+   bought. Without the second, switching the earning game back on would hand
+   you a garage you never paid for, and the prices would be theatre. */
+
+{
+  console.log('\n  money, switched on and off');
+
+  const slotKey = ctx.SLOTS[0].key;
+  const top = ctx.SLOTS[0].tiers.length - 1;
+  const price = ctx.SLOTS[0].tiers[top].cost;
+
+  ctx.SAVE.parts = {};
+  ctx.SAVE.credits = 0;
+  ctx.SAVE.freeBuild = true;
+
+  H.ok(ctx.freeBuild(), 'unlimited money is the default');
+  H.ok(ctx.partCost(slotKey, top) === 0, 'so nothing has a price',
+       ctx.SLOTS[0].tiers[top].name + ', normally ' + price);
+  H.ok(ctx.listPrice('proto') > 0,
+       'though the showroom still knows what a car is worth',
+       ctx.listPrice('proto') + '');
+
+  const free = ctx.buyPart('hatch', slotKey, top);
+  H.ok(free.ok && ctx.tierOf('hatch', slotKey) === top,
+       'the dearest part goes on with no money at all');
+  H.ok(ctx.SAVE.credits === 0, 'and nothing was taken for it');
+  H.ok(!ctx.ownsPart('hatch', slotKey, top),
+       'and it is not recorded as bought, so the prices stay real');
+
+  /* Switched off, the shop is a shop again. */
+  ctx.SAVE.freeBuild = false;
+  H.ok(ctx.partCost(slotKey, top) === price, 'switching it off puts the price back',
+       price + '');
+  H.ok(!ctx.buyPart('hatch', slotKey, top).ok,
+       'and with an empty wallet you cannot have it');
+
+  ctx.SAVE.credits = price;
+  const bought = ctx.buyPart('hatch', slotKey, top);
+  H.ok(bought.ok && ctx.SAVE.credits === 0 && ctx.ownsPart('hatch', slotKey, top),
+       'pay for it and it is yours, and the money is gone');
+
+  /* Cars work the same way round. */
+  const dear = ctx.CAR_ORDER[ctx.CAR_ORDER.length - 1];
+  H.ok(!ctx.ownsCar(dear), 'a car you have not bought is not yours', dear);
+  ctx.SAVE.freeBuild = true;
+  H.ok(ctx.ownsCar(dear), 'and with money off, every car is', dear);
+  H.ok(ctx.SAVE.owned.indexOf(dear) === -1,
+       'without being written into the save as owned');
+
+  ctx.SAVE.freeBuild = true;        // leave it as the game ships
+  ctx.SAVE.parts = {};
+  ctx.SAVE.credits = 0;
 }
 
 H.done();

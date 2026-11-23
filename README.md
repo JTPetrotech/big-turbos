@@ -28,7 +28,8 @@ expensive ones buy a **trade** rather than a straight win:
 | Short gears | Leaps out of corners | Runs out of road |
 | Long gears | Enormous down a straight | Lazy away from a stop |
 | Stripped shell | Quicker everywhere | The back end gets nervous |
-| Big turbo | +42% once it is spinning | Nothing at all below 58 mph |
+| Quad turbo | +74% once it is spinning | Nothing at all below 69 mph |
+| Supercharger | +30% from a standstill | Less up top, and 38 kg of it |
 | Lift kit | Grip in a field, and the look | Grip, top speed and calm on tarmac |
 | Nitrous | +62% while you hold it | 34 kg carried every lap, and it runs out |
 | Spool diff | Drives off the apex | Will not turn into one |
@@ -46,6 +47,24 @@ free roam.
 The preview in the garage is produced by the same `carStats()` call the
 physics uses — not a second table someone typed the numbers into twice. If
 it says a part adds 12 kW, the car gets 12 kW.
+
+## The Workbench
+
+Four body kits come off the shelf. The Workbench is where you make your own:
+a front splitter, arches, side skirts, a wing and a scoop, each with its own
+steps, named and saved to the garage for every car you own. Twelve slots,
+and scrapping one puts any car wearing it back to standard rather than
+quietly dressing it in the next kit along.
+
+The car in front of you wears the draft while you build it, and it wears it
+through exactly the same code path a saved kit uses — so what you are looking
+at is the kit, not an impression of it.
+
+None of it is worth a single newton. Splitters and wings here are shape, and
+the aero that actually grips is a part in the garage with a top speed
+penalty attached. A test puts the wildest kit the bench can produce onto a
+car and checks `carStats` does not move, because a body kit that quietly
+added grip would make the whole garage a liar.
 
 ## The cars
 
@@ -204,10 +223,26 @@ there are no ads, no premium currency, no timers to skip and nothing to top
 up — in this game or in any of the others here. A GitHub Pages site could not
 take a payment if it wanted to, and it does not want to.
 
-What there *is* is in-game money, in dollars, won by driving and only by
-driving. The one way it goes down is the side bet: before a career race you
-can stake up to what you are holding, at odds set by how far the field
-outclasses your car. Win and it pays; finish anywhere else and the stake is
-gone. Prize money alone means the number only ever rises, which makes it
-meaningless after an hour — being able to lose it is what gives the rest of
-the garage its weight.
+In-game money is **unlimited, out of the box**. Every part and every car is
+simply there. The garage is the game and the point of it is trying
+combinations, not saving up for them, so by default nothing stands between
+you and a quad-turbo wide-body truck.
+
+Next to the money, in the garage and in the showroom, is a switch that turns
+the earning game back on: prices, prize money, and a side bet before a career
+race where you can stake what you are holding at odds set by how far the
+field outclasses your car. Win and it pays, finish anywhere else and the
+stake is gone. That bet is the only way the number ever goes down, which is
+the whole reason it exists — prize money alone means the figure only rises,
+and a figure that only rises stops meaning anything after an hour.
+
+Nothing fitted while money is off is recorded as bought, so switching the
+earning game back on hands you the garage you actually paid for rather than
+everything you tried for free. The two modes do not contaminate each other.
+
+Worth saying plainly, because it is a real trade and not a free win: with
+money unlimited the career stops being a ladder. Nothing is withheld, so
+nothing is earned, and the side bet disappears because a stake you cannot
+lose is not a stake. What is left is the driving and the garage, which is
+most of the game and the best part of it. The switch is there because which
+of those two you want depends on who is holding the controller.

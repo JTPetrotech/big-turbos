@@ -168,7 +168,7 @@ function buildCar(carKey, looks, lift){
   lift = lift || 0;
   looks = looks || { paint: defaultPaint(carKey), wheel: 1, stripe: 0, spoiler: false,
                      kit: 0, size: 0 };
-  var kit = KITS[looks.kit || 0] || KITS[0];
+  var kit = kitAt(looks.kit || 0);
   var wsize = (WHEEL_SIZES[looks.size || 0] || WHEEL_SIZES[0]).d;
 
   var paint = (PAINTS[looks.paint] || PAINTS[0]).c;
@@ -248,14 +248,41 @@ function buildCar(carKey, looks, lift){
     hull.add(box(0.1, b.hood * 0.5, L * 0.56, DARK, s2 * W / 2, b.hood * 0.16, 0));
   }
 
-  /* spoiler */
-  if(looks.spoiler){
-    var sz = -(L - b.nose - b.tail) / 2 - b.tail * 0.7;
-    var deck = box(W * 0.84, 0.05, 0.34, paint, 0, b.roof * 0.98, sz);
-    hull.add(deck);
+  /* side skirts, sitting just outboard of whatever the arches are doing */
+  if(kit.skirt > 0){
+    for(var ks = -1; ks <= 1; ks += 2){
+      hull.add(box(0.06, kit.skirt, L * 0.5, DARK,
+                   ks * (W / 2 + (kit.arch || 0) * 0.9),
+                   kit.skirt * 0.5 - 0.02, 0));
+    }
+  }
+
+  /* a scoop, on the bonnet or up on the roof like a rally car */
+  if(kit.scoop === 1){
+    hull.add(box(W * 0.30, 0.07, 0.34, DARK, 0, b.hood + 0.035,
+                 (L - b.nose - b.tail) / 2 - 0.34));
+  } else if(kit.scoop === 2){
+    hull.add(box(W * 0.22, 0.09, 0.30, paint, 0, b.roof + 0.045,
+                 b.cabF + b.cabL * 0.3));
+  }
+
+  /* The wing. A kit built on the Workbench says which one; the old on/off
+     spoiler still works for saves and presets that do not. */
+  var wing = kit.wing || (looks.spoiler ? 2 : 0);
+  var sz = -(L - b.nose - b.tail) / 2 - b.tail * 0.7;
+  if(wing === 1){
+    hull.add(box(W * 0.80, 0.07, 0.18, paint, 0, b.roof * 0.72, sz));
+  } else if(wing === 2){
+    hull.add(box(W * 0.84, 0.05, 0.34, paint, 0, b.roof * 0.98, sz));
     for(var s3 = -1; s3 <= 1; s3 += 2){
       hull.add(box(0.07, b.roof * 0.3, 0.1, DARK,
                    s3 * W * 0.3, b.roof * 0.83, sz));
+    }
+  } else if(wing === 3){
+    hull.add(box(W * 0.98, 0.04, 0.42, DARK, 0, b.roof * 1.24, sz));
+    for(var s4 = -1; s4 <= 1; s4 += 2){
+      hull.add(box(0.05, b.roof * 0.44, 0.26, DARK,
+                   s4 * W * 0.40, b.roof * 1.02, sz + 0.05));
     }
   }
 
