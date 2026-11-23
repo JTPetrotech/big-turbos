@@ -284,4 +284,140 @@ console.log('\n  the championships');
        'every round hands out the same points', total + ' across the season');
 }
 
+/* ------------------------------------------ the text the game shows you -- */
+
+/* Every number printed in the garage is a claim about a stat sitting a few
+   lines away from it in the same file, and nothing stops the two drifting
+   apart. A wrong description is worse than a wrong README: the player reads
+   it while deciding what to spend money they earned on.
+
+   So find every number in every piece of player-facing text and insist it
+   can be derived from the stats of the thing it describes. There is no list
+   of expected values here on purpose - that would be the same table typed
+   twice over again, which is the problem rather than the fix. */
+
+{
+  console.log('\n  the text the game shows you');
+
+  /* What a number in a tier's description is allowed to mean. Every entry
+     reads the tier's own stats, so retuning a part changes what its own text
+     is permitted to say. */
+  const meanings = t => {
+    const m = [];
+    const add = (v, what) => {
+      if(typeof v === 'number' && isFinite(v)) m.push({ v: v, what: what });
+    };
+    const pct = (v, what) => add(Math.abs(1 - v) * 100, what);
+
+    if(t.power !== undefined) pct(t.power, 'the power change');
+    if(t.boost !== undefined) add(t.boost * 100, 'the boost it adds');
+    if(t.lag !== undefined) add(t.lag * MPH, 'the speed it comes in at');
+    if(t.nos !== undefined) add(t.nos * 100, 'the nitrous it adds');
+    if(t.nosTime !== undefined) add(t.nosTime, 'seconds of nitrous');
+    if(t.mass !== undefined) add(Math.abs(t.mass), 'the weight');
+    if(t.grip !== undefined) pct(t.grip, 'the grip change');
+    if(t.steer !== undefined) pct(t.steer, 'the steering change');
+    if(t.brake !== undefined) pct(t.brake, 'the braking change');
+    if(t.down !== undefined) add(t.down * 100, 'the downforce');
+    if(t.cda !== undefined) pct(t.cda, 'the drag change');
+    if(t.force !== undefined) pct(t.force, 'the gearing change');
+    if(t.top !== undefined) pct(t.top, 'the top speed change');
+    if(t.diff !== undefined) add(t.diff * 100, 'how far it locks');
+    if(t.launch !== undefined) pct(t.launch, 'the launch change');
+    if(t.lift !== undefined) add(t.lift * 39.3701, 'inches of ride height');
+    if(t.offroad !== undefined) add(t.offroad * 100, 'the off-road grip');
+    if(t.stability !== undefined) pct(t.stability, 'the stability change');
+    return m;
+  };
+
+  /* A car's stats are absolute, not multipliers, so they read differently. */
+  const carMeanings = c => {
+    const m = [];
+    const add = (v, what) => {
+      if(typeof v === 'number' && isFinite(v)) m.push({ v: v, what: what });
+    };
+    add(c.power, 'its kW');
+    add(c.power * 1.34102, 'its horsepower');
+    add(c.mass, 'its weight');
+    if(c.lag !== undefined) add(c.lag * MPH, 'the speed its turbo comes in at');
+    if(c.boost !== undefined) add(c.boost * 100, 'its factory boost');
+    return m;
+  };
+
+  /* "around 30 mph" is allowed to be 31.3. An unqualified number is not. */
+  const APPROX = /\b(around|about|roughly|nearly|almost|some)\s*$/i;
+
+  const checkText = (label, text, allowed) => {
+    const found = text.match(/\d+(?:\.\d+)?/g);
+    if(!found) return;                        // nothing claimed, nothing to check
+    const bad = [];
+    const matched = [];
+    for(const raw of found){
+      const at = text.indexOf(raw);
+      const before = text.slice(Math.max(0, at - 12), at);
+      const tol = APPROX.test(before) ? 2.5 : 1;
+      const said = parseFloat(raw);
+      const hit = allowed.filter(a => Math.abs(a.v - said) <= tol)[0];
+      if(hit) matched.push(raw + ' = ' + hit.what);
+      else bad.push('"' + raw + '" matches nothing on it' +
+                    (allowed.length ? ' (nearest: ' + allowed
+                       .slice().sort((x, y) => Math.abs(x.v - said) - Math.abs(y.v - said))[0]
+                       .v.toFixed(1) + ')' : ''));
+    }
+    H.ok(bad.length === 0, label, bad.length ? bad.join('; ') : matched.join(', '));
+  };
+
+  /* Tier descriptions. Tier *names* are deliberately left alone: "6in on 37s"
+     is a name for a build, and the 37 is a tyre diameter the model has no
+     stat for. Inventing a rule for it would be making a spec up rather than
+     checking one. */
+  for(const slot of ctx.SLOTS){
+    for(const tier of slot.tiers){
+      if(tier.d) checkText(slot.name + ' / ' + tier.name + ' says only what it does',
+                           tier.d, meanings(tier));
+    }
+
+    /* A slot's blurb covers every tier at once, so it can only ever be right
+       about one of them. It must not quote a number. */
+    H.ok(!/\d/.test(slot.blurb || ''),
+         slot.name + ' blurb makes no numeric promise it cannot keep',
+         slot.blurb);
+  }
+
+  /* Car descriptions, same rule. */
+  for(const key of ctx.CAR_ORDER){
+    const car = ctx.CARS[key];
+    if(car.desc) checkText(car.name + ' is described accurately',
+                           car.desc, carMeanings(car));
+  }
+
+  /* Two claims are spelled out in words rather than digits. */
+  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+                 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+
+  /* "for four seconds a race" has to be the bottle's actual budget. */
+  for(const tier of ctx.slotByKey('nos').tiers){
+    if(!tier.nosTime) continue;
+    const word = WORDS[tier.nosTime] || String(tier.nosTime);
+    H.ok(new RegExp(word + ' seconds?').test(tier.d),
+         'Nitrous / ' + tier.name + ' quotes the seconds it really gives you',
+         tier.nosTime + 's, written "' + word + '"');
+  }
+
+  /* "seven hundred horsepower" has to round to the car's actual output. */
+  let hundreds = 0;
+  for(const key of ctx.CAR_ORDER){
+    const car = ctx.CARS[key];
+    const m = (car.desc || '').match(/(\w+) hundred horsepower/i);
+    if(!m) continue;
+    hundreds++;
+    const said = (WORDS.indexOf(m[1].toLowerCase()) + 0) * 100;
+    const real = car.power * 1.34102;
+    H.ok(Math.abs(said - real) <= 50,
+         car.name + ' really has the horsepower it boasts about',
+         'says ' + said + ' hp, has ' + Math.round(real) + ' hp');
+  }
+  H.ok(hundreds > 0, 'and that check found a car to run on', hundreds + ' of them');
+}
+
 H.done();

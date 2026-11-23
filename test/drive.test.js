@@ -434,6 +434,38 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
        missing.length ? 'no mention of ' + missing.join(', ')
                       : sixInch.name + ' -> ' + marks.join(' + '));
 
+  /* The parts table also quotes a figure for the race clutch. That one is not
+     a stat sitting in a table, it is an outcome, so it has to be driven for:
+     fit the top clutch to every car in the showroom and see what it is really
+     worth down the strip. The claim has to hold for all of them rather than
+     for one flattering example - which is how the README came to say "a
+     second off the line" for something worth a fifth of that. */
+  const clutchTop = ctx.slotByKey('clutch').tiers.length - 1;
+  let least = Infinity, most = -Infinity, meanest = '';
+  for(const key of ctx.CAR_ORDER){
+    const gain = quarter(key).et - quarter(key, { clutch: clutchTop }).et;
+    if(gain < least){ least = gain; meanest = ctx.CARS[key].name; }
+    if(gain > most) most = gain;
+  }
+  /* It is quoted as a range because it honestly is one - a light car with
+     little grip gets less out of a clutch than a heavy one with plenty. Both
+     ends are checked: every car has to fall inside the printed range, and the
+     printed range is not allowed to be padded out to where it says nothing. */
+  const clutchSaid = flat.match(/Race clutch \| ([\d.]+)-([\d.]+)s off the line/);
+  if(!clutchSaid){
+    H.ok(false, 'the README still quotes what the race clutch is worth');
+  } else {
+    const lo = plain(clutchSaid[1]), hi = plain(clutchSaid[2]);
+    const covers = least >= lo - 0.01 && most <= hi + 0.01;
+    const honest = lo >= least - 0.06 && hi <= most + 0.06;
+    H.ok(covers && honest,
+         'the race clutch is worth what the README says, on every car',
+         'README says ' + lo + '-' + hi + 's; measured ' + least.toFixed(2) +
+         's (' + meanest + ') to ' + most.toFixed(2) + 's' +
+         (covers ? '' : ' - outside the range') +
+         (honest ? '' : ' - range padded'));
+  }
+
   /* Free roam is quoted in kilometres across, not in WORLD_EDGE. */
   says('the field in free roam is as big as the README makes out',
        /the ([\d.]+) km field/, ctx.WORLD_EDGE * 2 / 1000, 0.05);

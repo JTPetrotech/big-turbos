@@ -27,7 +27,7 @@ expensive ones buy a **trade** rather than a straight win:
 | Lift kit | Grip in a field, and the look | Grip, top speed and calm on tarmac |
 | Nitrous | +62% while you hold it | 34 kg carried every lap, and it runs out |
 | Spool diff | Drives off the apex | Will not turn into one |
-| Race clutch | A second off the line | Nothing at all after that |
+| Race clutch | 0.15-0.3s off the line | Nothing at all after that |
 
 So the garage is a set of decisions rather than a queue. A car built for
 Ridgeback is the wrong car for Dockside.
