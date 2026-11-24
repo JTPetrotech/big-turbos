@@ -136,6 +136,15 @@ The turbo cars carry their induction from the factory, so an A80 is already
 making boost from 22 mph before you fit anything. The supercharged ones have
 no lag at all, and a great deal of power instead.
 
+They are drawn at runtime out of eight-cornered panels rather than boxes,
+because no panel on a car is a box: a body tucks under at the sills and
+pinches in towards the nose, and a greenhouse leans in at the roof and
+rakes back hard at the windscreen. The heights are the real ones too. They
+were not - a hatchback stood 1.08 m when the car it is drawn from stands
+1.45, and the whole showroom was squashed by a quarter. The two trucks were
+the only things built to the right height, which is exactly why they were
+the only things that looked like vehicles.
+
 ## The modes
 
 **Career** and **quick race** are the laps. Two more are not:
@@ -199,7 +208,7 @@ screen in a tunnel.
 parts/00-head.html    shell, styles, every overlay
 parts/10-core.js      state, input, save
 parts/20-track.js     spline tracks, scene, the progress lookup
-parts/30-cars.js      five silhouettes, built from boxes at runtime
+parts/30-cars.js      sixteen silhouettes, drawn from tapered panels
 parts/40-drive.js     the driving model and the AI
 parts/45-garage.js    cars, parts, stats, economy, career
 parts/46-garage-ui.js the garage on screen
