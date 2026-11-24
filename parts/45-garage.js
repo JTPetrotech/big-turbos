@@ -25,33 +25,33 @@ var RHO = 1.225;              // air, kg/m^3
 
 var CARS = {
   hatch: {
-    name: 'Kestrel 1.6', nick: 'The hatch',
+    name: 'Honda Civic Si', nick: 'The hatch',
     desc: 'Front-drive, light, and gutless in a straight line. It corners far better than it has any right to.',
-    price: 0, mass: 1010, power: 85, grip: 0.98, brake: 9.2, steer: 2.5, cda: 0.72,
+    price: 0, mass: 1046, power: 92, grip: 0.98, brake: 9.2, steer: 2.5, cda: 0.72,
     body: 'hatch', colour: 0x4a9eff
   },
   coupe: {
-    name: 'Vantor GT', nick: 'The coupe',
+    name: 'Toyota GR86', nick: 'The coupe',
     desc: 'The sensible step up. Nothing it does is remarkable and nothing it does is wrong.',
-    price: 24000, mass: 1290, power: 165, grip: 1.08, brake: 10.4, steer: 2.3, cda: 0.64,
+    price: 24000, mass: 1270, power: 174, grip: 1.08, brake: 10.4, steer: 2.3, cda: 0.64,
     body: 'coupe', colour: 0xe8463c
   },
   muscle: {
-    name: 'Kingsnake 7.0', nick: 'The muscle',
+    name: 'Plymouth Barracuda 426 Hemi', nick: 'The muscle',
     desc: 'Enormous power, enormous weight, brakes from an earlier decade. Terrifying and fast in that order.',
-    price: 46000, mass: 1620, power: 290, grip: 1.02, brake: 9.6, steer: 1.95, cda: 0.81,
+    price: 46000, mass: 1655, power: 317, grip: 1.02, brake: 9.6, steer: 1.95, cda: 0.81,
     body: 'muscle', colour: 0xf2a33c
   },
   rally: {
-    name: 'Alba Quattro', nick: 'The rally car',
+    name: 'Audi Sport Quattro', nick: 'The rally car',
     desc: 'All four wheels driven. Climbs out of corners in a way nothing else here manages.',
-    price: 72000, mass: 1345, power: 230, grip: 1.26, brake: 11.4, steer: 2.55, cda: 0.76,
+    price: 72000, mass: 1298, power: 225, grip: 1.26, brake: 11.4, steer: 2.55, cda: 0.76,
     body: 'rally', colour: 0xe8e8ea
   },
   proto: {
-    name: 'Sabre R', nick: 'The prototype',
+    name: 'Ultima GTR', nick: 'The prototype',
     desc: 'Barely a road car. Stiff, loud, and utterly unforgiving of a lazy line.',
-    price: 155000, mass: 980, power: 375, grip: 1.42, brake: 13.2, steer: 2.75, cda: 0.58,
+    price: 155000, mass: 930, power: 395, grip: 1.42, brake: 13.2, steer: 2.75, cda: 0.58,
     body: 'proto', colour: 0x2fd39a
   },
 
@@ -68,73 +68,73 @@ var CARS = {
      --------------------------------------------------------------------- */
 
   a80: {
-    name: 'Apex A80 Twin-Turbo', nick: 'The A80',
+    name: 'Toyota Supra RZ', nick: 'The A80',
     desc: 'Sequential turbos, so it pulls from almost nothing and never stops. Heavy, and it hides it well.',
     price: 58000, mass: 1570, power: 239, grip: 1.14, brake: 10.6, steer: 2.25, cda: 0.70,
     boost: 0.16, lag: 10,
     body: 'a80', colour: 0xe8562c
   },
   a90: {
-    name: 'Apex A90', nick: 'The A90',
+    name: 'Toyota GR Supra', nick: 'The A90',
     desc: 'Shorter, stiffer and sharper than the car it is named after. One big turbo and a very short wheelbase.',
     price: 78000, mass: 1540, power: 285, grip: 1.18, brake: 11.0, steer: 2.40, cda: 0.63,
     boost: 0.14, lag: 8,
     body: 'a90', colour: 0xd8d8dc
   },
   hellcoupe: {
-    name: 'Hellion 6.2 Coupe', nick: 'The Hellion',
+    name: 'Dodge Challenger Hellcat', nick: 'The Hellcat',
     desc: 'Supercharged, so all of it arrives at once. Two tonnes of it. The tyres are a formality.',
     price: 118000, mass: 1975, power: 527, grip: 1.04, brake: 10.2, steer: 1.90, cda: 0.86,
     body: 'hellcoupe', colour: 0x6b2fd0
   },
   hellsedan: {
-    name: 'Hellion 6.2 Sedan', nick: 'The four-door',
+    name: 'Dodge Charger Hellcat', nick: 'The four-door',
     desc: 'The same engine with two more doors and a longer wheelbase. Calmer, heavier, every bit as silly.',
     price: 112000, mass: 2050, power: 527, grip: 1.02, brake: 10.0, steer: 1.85, cda: 0.90,
     body: 'hellsedan', colour: 0x1d1f24
   },
   hellwagon: {
-    name: 'Hellion Wagon', nick: 'The fast SUV',
+    name: 'Dodge Durango Hellcat', nick: 'The fast SUV',
     desc: 'Three rows of seats and seven hundred horsepower. Physics has opinions about the corners.',
     price: 104000, mass: 2470, power: 529, grip: 0.95, brake: 9.8, steer: 1.75, cda: 1.08,
     body: 'suv', colour: 0x2a6e4a
   },
   rx: {
-    name: 'Kaido 13B', nick: 'The rotary',
+    name: 'Mazda RX-7', nick: 'The rotary',
     desc: 'A rotary, so it revs past where everything else has given up. Light, delicate, and allergic to neglect.',
     price: 64000, mass: 1280, power: 188, grip: 1.22, brake: 11.2, steer: 2.60, cda: 0.62,
     boost: 0.15, lag: 11, stability: 0.96,
     body: 'rx', colour: 0xf2e9d8
   },
   evo: {
-    name: 'Lancet RS', nick: 'The Evo',
+    name: 'Mitsubishi Lancer Evo IX', nick: 'The Evo',
     desc: 'Four driven wheels and a turbo, in a shell with no interior worth mentioning. It simply goes where you point it.',
     price: 84000, mass: 1410, power: 206, grip: 1.34, brake: 11.8, steer: 2.65, cda: 0.74,
     boost: 0.18, lag: 9,
     body: 'evo', colour: 0xe8e8ea
   },
   gtr: {
-    name: 'Nakagawa R34', nick: 'The Skyline',
+    name: 'Nissan Skyline GT-R R34', nick: 'The Skyline',
     desc: 'Twin turbos, all-wheel drive and more computers than the rest of this showroom combined. Heavy, and it never once feels it.',
     price: 88000, mass: 1560, power: 206, grip: 1.32, brake: 11.6, steer: 2.45, cda: 0.68,
     boost: 0.17, lag: 10,
     body: 'gtr', colour: 0x5aa8e8
   },
   rear: {
-    name: 'Pelican 930', nick: 'The widowmaker',
+    name: 'Porsche 911 Turbo 3.6', nick: 'The widowmaker',
     desc: 'Engine behind the back axle and a turbo that arrives all at once at 36 mph. Quick, and it has opinions about lifting mid-corner.',
-    price: 128000, mass: 1470, power: 283, grip: 1.30, brake: 11.9, steer: 2.50, cda: 0.60,
+    price: 128000, mass: 1470, power: 265, grip: 1.30, brake: 11.9, steer: 2.50, cda: 0.60,
     boost: 0.22, lag: 16, stability: 0.88,
     body: 'rear', colour: 0xf2d04a
   },
   super: {
-    name: 'Toro SV', nick: 'The supercar',
+    name: 'Lamborghini Aventador SV', nick: 'The supercar',
     desc: 'Mid-engined, naturally aspirated and completely impractical. The fastest thing here that still has a numberplate.',
-    price: 140000, mass: 1525, power: 471, grip: 1.38, brake: 12.6, steer: 2.60, cda: 0.64,
+    price: 140000, mass: 1525, power: 552, grip: 1.38, brake: 12.6, steer: 2.60, cda: 0.64,
     body: 'super', colour: 0x8ad83c
   },
   trx: {
-    name: 'Warhawk TRX', nick: 'The truck',
+    name: 'Ram 1500 TRX', nick: 'The truck',
     desc: 'Supercharged pickup on knobbly tyres. Hopeless in a corner, hilarious everywhere else, and it does not care about grass.',
     price: 96000, mass: 2900, power: 523, grip: 0.88, brake: 9.2, steer: 1.60, cda: 1.95,
     offroad: 0.35,
@@ -153,8 +153,8 @@ function isTruck(carKey){
 /* Showroom order, and the order the AI picks from. Sorted by rating, which
    the tests enforce - a showroom that is not in order is a showroom that
    lies about which car is the step up. */
-var CAR_ORDER = ['hatch', 'coupe', 'trx', 'muscle', 'a80', 'gtr', 'rx', 'rally',
-                 'evo', 'hellwagon', 'a90', 'hellsedan', 'rear', 'hellcoupe',
+var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'gtr', 'rx', 'muscle', 'rally',
+                 'evo', 'hellwagon', 'a90', 'rear', 'hellsedan', 'hellcoupe',
                  'super', 'proto'];
 
 /* ----------------------------------------------------------------- parts -- */

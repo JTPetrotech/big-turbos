@@ -111,30 +111,41 @@ added grip would make the whole garage a liar.
 
 ## The cars
 
-Sixteen of them. The five originals, a pair of turbo coupes, the JDM turbo
-stuff, a rear-engined handful, a supercar, and the big supercharged lot:
+Sixteen of them, all real cars, and the figures are the real ones: kilowatts, kilograms,
+and a drag area that a two-and-a-half tonne truck really does have. Nothing
+is scaled to feel fair.
 
 | | kW | kg | 0-60 | 1/4 mile |
 |---|---|---|---|---|
-| Apex A80 Twin-Turbo | 239 | 1,570 | 4.5s | 13.27s @ 102 mph |
-| Apex A90 | 285 | 1,540 | 3.8s | 12.50s @ 109 mph |
-| Hellion 6.2 Coupe | 527 | 1,975 | 3.5s | 11.92s @ 117 mph |
-| Hellion 6.2 Sedan | 527 | 2,050 | 3.6s | 12.07s @ 116 mph |
-| Hellion Wagon | 529 | 2,470 | 4.1s | 12.75s @ 109 mph |
-| Warhawk TRX | 523 | 2,900 | 4.8s | 13.58s @ 100 mph |
-| Kaido 13B | 188 | 1,280 | 4.7s | 13.43s @ 100 mph |
-| Lancet RS | 206 | 1,410 | 4.5s | 13.28s @ 100 mph |
-| Nakagawa R34 | 206 | 1,560 | 5.0s | 13.72s @ 97 mph |
-| Pelican 930 | 283 | 1,470 | 3.7s | 12.18s @ 113 mph |
-| Toro SV | 471 | 1,525 | 2.8s | 11.08s @ 124 mph |
+| Honda Civic Si | 92 | 1,046 | 8.8s | 16.65s @ 78 mph |
+| Toyota GR86 | 174 | 1,270 | 5.6s | 14.32s @ 93 mph |
+| Ram 1500 TRX | 523 | 2,900 | 4.8s | 13.58s @ 100 mph |
+| Toyota Supra RZ | 239 | 1,570 | 4.5s | 13.27s @ 102 mph |
+| Nissan Skyline GT-R R34 | 206 | 1,560 | 5.0s | 13.72s @ 97 mph |
+| Mazda RX-7 | 188 | 1,280 | 4.7s | 13.43s @ 100 mph |
+| Plymouth Barracuda 426 Hemi | 317 | 1,655 | 4.3s | 13.05s @ 104 mph |
+| Audi Sport Quattro | 225 | 1,298 | 4.4s | 13.27s @ 100 mph |
+| Mitsubishi Lancer Evo IX | 206 | 1,410 | 4.5s | 13.28s @ 100 mph |
+| Dodge Durango Hellcat | 529 | 2,470 | 4.1s | 12.75s @ 109 mph |
+| Toyota GR Supra | 285 | 1,540 | 3.8s | 12.50s @ 109 mph |
+| Porsche 911 Turbo 3.6 | 265 | 1,470 | 3.9s | 12.43s @ 110 mph |
+| Dodge Charger Hellcat | 527 | 2,050 | 3.6s | 12.07s @ 116 mph |
+| Dodge Challenger Hellcat | 527 | 1,975 | 3.5s | 11.92s @ 117 mph |
+| Lamborghini Aventador SV | 552 | 1,525 | 2.6s | 10.63s @ 130 mph |
+| Ultima GTR | 395 | 930 | 2.4s | 10.27s @ 134 mph |
 
 Nobody typed those quarter-mile times in. They are what the driving model
 produces when you point each car down the strip, and they land within a few
 tenths of the real cars these are drawn from.
 
-The turbo cars carry their induction from the factory, so an A80 is already
-making boost from 22 mph before you fit anything. The supercharged ones have
-no lag at all, and a great deal of power instead.
+The turbo cars carry their induction from the factory, so a Supra RZ is
+already making boost from 22 mph before you fit anything. The supercharged
+ones have no lag at all, and a great deal of power instead.
+
+The five cheapest used to be invented cars with invented numbers, kept out
+of this table because there was nothing to check them against. They are real
+cars now, and so are their weights and their power, which is why they are in
+the table with everything else.
 
 They are drawn at runtime out of eight-cornered panels rather than boxes,
 because no panel on a car is a box: a body tucks under at the sills and
@@ -185,7 +196,7 @@ difference, and when they cannot fight it any more you are sliding. There is
 no separate "drift mode" — it falls out of the same two lines.
 
 Units are real: metres, seconds, kilograms, newtons. The stock hatch does
-0–60 in 9.3s and tops out at 95 mph, because 85 kW pushing 1,010 kg is what
+0–60 in 8.8s and tops out at 98 mph, because 92 kW pushing 1,046 kg is what
 that does.
 
 ## Controls

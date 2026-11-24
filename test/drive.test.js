@@ -340,7 +340,7 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
   const flat = readme.replace(/\s+/g, ' ');          // prose, unwrapped
   const plain = t => parseFloat(String(t).replace(/,/g, ''));
 
-  /* | Apex A80 Twin-Turbo | 239 | 1,570 | 4.5s | 13.27s @ 102 mph | */
+  /* | Toyota Supra RZ | 239 | 1,570 | 4.5s | 13.27s @ 102 mph | */
   const ROW = /^\|\s*([A-Za-z][^|]*?)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|\s*([\d.]+)s\s*\|\s*([\d.]+)s @ (\d+) mph\s*\|/;
   const quoted = readme.split(/\r?\n/).map(l => l.match(ROW)).filter(Boolean);
   H.ok(quoted.length >= 11, 'the car table is still in the README and parses',
@@ -561,7 +561,7 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
   /* What a lift kit actually buys. Comparing the same truck to itself keeps
      power and weight out of it, so what is left is the grip - which is the
      whole trade. Straight-line speed across a field is not the test: a
-     Hellion has enough power to out-drag a truck anywhere, and still cannot
+     Hellcat has enough power to out-drag a truck anywhere, and still cannot
      point itself at anything once it is off the tarmac. */
   const slideOnGrass = (parts) => {
     const car = ctx.makeCar('trx', parts);
