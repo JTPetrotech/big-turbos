@@ -159,6 +159,14 @@ two is what decides who won.
 same three rivals in the same cars every round, ten points for a win, and a
 standings table that is about people you recognise by round three.
 
+Each track is a road ribbon with a run-off either side of it, a barrier
+standing exactly where the physics puts its wall, and something beyond
+that worth passing: pines at the Ring and the Ridge, stacked shipping
+containers at the docks, floodlight pylons down the strip. All of it is
+instanced, so a hundred and fifty trees cost two draw calls, and all of it
+is placed off the same hash the AI uses, so a lap looks the same every
+time you drive it.
+
 **Free roam** has no clock, no grid and no barrier. The road is a suggestion
 and the 1.3 km field around it is the point. It is also the only place a lift
 kit earns its money.

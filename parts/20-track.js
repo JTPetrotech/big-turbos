@@ -16,21 +16,21 @@ var TRACKS = {
   ring: {
     name: 'Cannery Ring',
     desc: 'Short, wide and forgiving. Two real corners and a back straight.',
-    width: 13, laps: 3, grass: 0x1d2a16,
+    width: 13, laps: 3, grass: 0x1d2a16, runoff: 0x6d6149, scene: 'trees',
     pts: [[0,-150],[90,-130],[140,-60],[140,30],[100,110],[20,150],[-70,140],
           [-130,80],[-140,-10],[-110,-90],[-50,-145]]
   },
   docks: {
     name: 'Dockside',
     desc: 'Tight, square and unforgiving. Brake early or meet the barrier.',
-    width: 11, laps: 4, grass: 0x1b1f26,
+    width: 11, laps: 4, grass: 0x1b1f26, runoff: 0x383b43, scene: 'crates',
     pts: [[-120,-120],[0,-140],[120,-120],[150,-40],[110,20],[30,10],[-10,60],
           [40,110],[10,160],[-80,150],[-150,90],[-160,-20]]
   },
   ridge: {
     name: 'Ridgeback',
     desc: 'Long, fast and flowing. Rewards a car that can hold a line.',
-    width: 14, laps: 2, grass: 0x18241d,
+    width: 14, laps: 2, grass: 0x18241d, runoff: 0x5e5544, scene: 'trees',
     pts: [[0,-210],[120,-190],[210,-110],[230,10],[190,120],[90,190],[-30,215],
           [-150,185],[-225,95],[-240,-30],[-190,-140],[-90,-200]]
   },
@@ -43,7 +43,7 @@ var TRACKS = {
   strip: {
     name: 'Mill Road Strip',
     desc: 'A quarter mile, a pair of lanes and a set of lights. Nothing to steer around.',
-    width: 20, laps: 1, grass: 0x1a1d22,
+    width: 20, laps: 1, grass: 0x1a1d22, runoff: 0x3e4148, scene: 'poles',
     shape: 'strip', length: 530, turn: 46
   },
 
@@ -52,7 +52,7 @@ var TRACKS = {
   roam: {
     name: 'Mill Road',
     desc: 'No clock, no grid, no laps. Drive wherever you like, including off it.',
-    width: 16, laps: 0, grass: 0x1b2a18, open: true,
+    width: 16, laps: 0, grass: 0x1b2a18, open: true, runoff: 0x5e5949, scene: 'trees',
     pts: [[0,-260],[170,-230],[290,-130],[320,20],[250,170],[110,250],[-40,280],
           [-190,240],[-300,130],[-330,-30],[-260,-180],[-120,-260]]
   }
@@ -180,6 +180,7 @@ function buildTrack(key){
   return {
     key: key, name: def.name, desc: def.desc,
     width: def.width, laps: def.laps, grass: def.grass,
+    runoff: def.runoff, scene: def.scene,
     open: !!def.open, shape: def.shape || 'loop',
     pts: pts, n: n, total: total
   };
@@ -239,8 +240,12 @@ var trackGroup = null;
 
 function initScene(){
   scene = new T.Scene();
-  scene.background = new T.Color(0x0a0d14);
-  scene.fog = new T.Fog(0x0a0d14, 160, 420);
+  scene.background = new T.Color(0x05070d);
+  /* Fog the colour of the horizon rather than of the zenith, so distance
+     fades into the sky instead of into a dark band across the middle of
+     it. Pushed back as well: 420 m put the far side of Ridgeback in a
+     fog bank you could not see a corner through. */
+  scene.fog = new T.Fog(0x232a3a, 240, 620);
 
   camera = new T.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.4, 900);
 
@@ -255,6 +260,11 @@ function initScene(){
   scene.add(sun);
   scene.add(new T.HemisphereLight(0x6e86b0, 0x14160e, 0.55));
 
+  /* A gradient dome instead of a flat background colour. It is drawn with
+     fog off and depth writing off, so it sits behind everything without
+     the fog eating it and without needing to be sorted. */
+  scene.add(skyDome());
+
   window.addEventListener('resize', onResize);
 }
 
@@ -267,40 +277,225 @@ function onResize(){
 
 /* Road, kerbs, start line and barrier posts, all as a few merged meshes so a
    whole circuit costs a handful of draw calls rather than hundreds. */
+/* ----------------------------------------------------------------- sky -- */
+
+/* A dome with a vertical gradient painted into an 8 by 128 canvas. A flat
+   background colour gives you no horizon at all, and a horizon is most of
+   how a flat world reads as a landscape. Fog is off on it because fog is
+   meant to fade things INTO the sky, and depth writing is off so it never
+   has to be sorted against anything. */
+function skyDome(){
+  var c = document.createElement('canvas');
+  c.width = 8; c.height = 128;
+  var g = c.getContext('2d');
+  var grd = g.createLinearGradient(0, 0, 0, 128);
+  grd.addColorStop(0.00, '#04060b');
+  grd.addColorStop(0.45, '#0a1020');
+  grd.addColorStop(0.78, '#1a2132');
+  grd.addColorStop(0.95, '#2b3345');
+  grd.addColorStop(1.00, '#39405070'.slice(0, 7));
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 8, 128);
+  var t = new T.CanvasTexture(c);
+  var dome = new T.Mesh(
+    new T.SphereGeometry(620, 24, 16),
+    new T.MeshBasicMaterial({ map: t, side: T.BackSide, fog: false,
+                              depthWrite: false })
+  );
+  dome.renderOrder = -2;
+  return dome;
+}
+
+/* ------------------------------------------------------------- surfaces -- */
+
+/* Scenery makes its own materials rather than borrowing the cars cache.
+   disposeTree disposes everything in the track group when a track is torn
+   down, and a shared material disposed out from under the showroom is a
+   car that renders black for the rest of the session. */
+function lam(colour){ return new T.MeshLambertMaterial({ color: colour }); }
+
+/* Flat colour is what makes a big surface look like a sheet of card. A few
+   hundred soft specks, drawn once into a 64 px canvas and tiled, is enough
+   to stop that happening and costs one texture for the whole ground. The
+   specks come out of hash01 rather than Math.random, so a track looks the
+   same every time it is built. */
+var GRAIN_CACHE = {};
+function grainTexture(hex, spread, repeat, seed){
+  var key = hex + '|' + spread + '|' + repeat + '|' + seed;
+  if(GRAIN_CACHE[key]) return GRAIN_CACHE[key];
+  var S = 64;
+  var c = document.createElement('canvas');
+  c.width = c.height = S;
+  var g = c.getContext('2d');
+  var r0 = (hex >> 16) & 255, g0 = (hex >> 8) & 255, b0 = hex & 255;
+  g.fillStyle = 'rgb(' + r0 + ',' + g0 + ',' + b0 + ')';
+  g.fillRect(0, 0, S, S);
+  for(var i = 0; i < 420; i++){
+    var h = hash01(i * 1.37 + seed), h2 = hash01(i * 3.91 + seed), h3 = hash01(i * 7.13 + seed);
+    var d = (hash01(i * 2.57 + seed) - 0.5) * 2 * spread;
+    g.fillStyle = 'rgba(' + clamp(r0 + d, 0, 255).toFixed(0) + ',' +
+                            clamp(g0 + d, 0, 255).toFixed(0) + ',' +
+                            clamp(b0 + d, 0, 255).toFixed(0) + ',0.55)';
+    g.beginPath();
+    g.arc(h * S, h2 * S, 0.6 + h3 * 2.2, 0, Math.PI * 2);
+    g.fill();
+  }
+  var t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.repeat.set(repeat, repeat);
+  if(renderer) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  GRAIN_CACHE[key] = t;
+  return t;
+}
+
+/* A band that follows the centreline. Each edge is given as a lateral offset
+   and a height, which is all it takes to be either a flat surface or a
+   standing one - the road, the run-off either side of it, the painted lines
+   along its edges and the barrier rail are every one of them this. */
+function band(pts, n, A, B, material, metresPerTile){
+  var v = [], idx = [], uv = [];
+  for(var i = 0; i < n; i++){
+    var p = pts[i];
+    var nx = Math.cos(p.dir), nz = -Math.sin(p.dir);
+    v.push(p.x + nx * A.off, A.y, p.z + nz * A.off);
+    v.push(p.x + nx * B.off, B.y, p.z + nz * B.off);
+    var u = p.cum / (metresPerTile || 8);
+    uv.push(0, u, 1, u);
+  }
+  for(var j = 0; j < n; j++){
+    var a = j * 2, b = ((j + 1) % n) * 2;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  var g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(v, 3));
+  g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return new T.Mesh(g, material);
+}
+
+/* --------------------------------------------------------------- scenery -- */
+
+/* Where the roadside furniture goes. Everything is placed off hash01 from
+   the point index, so a lap looks the same every time you drive it, and far
+   enough out to be clear of anywhere a car can reach - except on free roam,
+   where there is no barrier and the only honest answer is to keep the
+   scenery a long way off. */
+function scatterSpots(track, pts, n, every, keep, near, far){
+  var out = [];
+  for(var i = 0; i < n; i += every){
+    for(var s = -1; s <= 1; s += 2){
+      var seed = i * 2.7 + (s > 0 ? 0 : 101);
+      if(hash01(seed) > keep) continue;
+      var p = pts[i];
+      var off = near + hash01(seed * 1.9 + 3) * (far - near);
+      var along = (hash01(seed * 3.3 + 7) - 0.5) * SPACING * 2.5;
+      var nx = Math.cos(p.dir), nz = -Math.sin(p.dir);
+      out.push({
+        x: p.x + nx * off * s + Math.sin(p.dir) * along,
+        z: p.z + nz * off * s + Math.cos(p.dir) * along,
+        turn: hash01(seed * 5.7 + 11) * 6.283,
+        size: 0.72 + hash01(seed * 8.1 + 13) * 0.8
+      });
+    }
+  }
+  return out;
+}
+
+function placeInstances(geo, material, spots, y, scaleY, group){
+  if(!spots.length) return;
+  var m = new T.InstancedMesh(geo, material, spots.length);
+  var d = new T.Object3D();
+  for(var i = 0; i < spots.length; i++){
+    var sp = spots[i];
+    d.position.set(sp.x, y * sp.size * (scaleY || 1), sp.z);
+    d.rotation.set(0, sp.turn, 0);
+    d.scale.set(sp.size, sp.size * (scaleY || 1), sp.size);
+    d.updateMatrix();
+    m.setMatrixAt(i, d.matrix);
+  }
+  group.add(m);
+}
+
+/* Three kinds of roadside, because a dockyard with pine trees in it is a
+   dockyard nobody believes. Each one is two instanced meshes at most, so a
+   hundred and fifty of anything is still two draw calls. */
+function buildScenery(track, pts, n, group){
+  var kind = track.scene || 'trees';
+  var hw = track.width / 2;
+  /* Clear of the barrier on a circuit; a long way out where there is none. */
+  var near = track.open ? 96 : hw + 12;
+
+  if(kind === 'poles'){
+    var poles = scatterSpots(track, pts, n, 16, 1.1, hw + 9, hw + 10);
+    placeInstances(new T.CylinderGeometry(0.16, 0.22, 9, 6),
+                   lam(0x6a7280), poles, 4.5, 1, group);
+    placeInstances(new T.BoxGeometry(1.9, 0.3, 0.6),
+                   lam(0xdfe6ef), poles, 9.1, 1, group);
+    return;
+  }
+
+  if(kind === 'crates'){
+    /* Shipping containers, at the real 6.06 by 2.44 by 2.59 metres, stacked
+       one high and two high in roughly equal measure. */
+    var lo = scatterSpots(track, pts, n, 5, 0.5, near, near + 30);
+    var hi = scatterSpots(track, pts, n, 9, 0.3, near + 6, near + 34);
+    var crate = new T.BoxGeometry(2.44, 2.59, 6.06);
+    placeInstances(crate, lam(0x8a4a3a), lo, 1.3, 1, group);
+    placeInstances(crate, lam(0x3f6276), hi, 1.3, 1, group);
+    placeInstances(crate, lam(0x6d7355), hi, 3.9, 1, group);
+    return;
+  }
+
+  var trees = scatterSpots(track, pts, n, 3, 0.58, near, near + 36);
+  placeInstances(new T.CylinderGeometry(0.17, 0.26, 2.4, 6),
+                 lam(0x3b2f24), trees, 1.2, 1, group);
+  placeInstances(new T.ConeGeometry(1.85, 4.4, 7),
+                 lam(0x1f3a22), trees, 4.4, 1, group);
+}
+
 function buildTrackMesh(track){
   if(trackGroup){ scene.remove(trackGroup); disposeTree(trackGroup); }
   trackGroup = new T.Group();
 
   var n = track.n, pts = track.pts, hw = track.width / 2;
 
+  /* Where the physics actually puts the wall. The posts used to stand 2.2 m
+     off the kerb while the barrier that stops you was out at 7, so the thing
+     you could see and the thing you hit were nearly five metres apart - you
+     drove straight through the posts and then bounced off nothing. A track
+     should not lie about where its edges are any more than a garage should
+     lie about a car. */
+  var WALL = hw + 7;
+
   /* --- ground --- */
   var ground = new T.Mesh(
     new T.PlaneGeometry(1400, 1400),
-    new T.MeshLambertMaterial({ color: track.grass })
+    new T.MeshLambertMaterial({ map: grainTexture(track.grass, 22, 150, 1.7) })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.06;
   trackGroup.add(ground);
 
-  /* --- road ribbon --- */
-  var rv = [], ri = [], ruv = [];
-  for(var i = 0; i < n; i++){
-    var p = pts[i];
-    var rx = Math.cos(p.dir), rz = -Math.sin(p.dir);
-    rv.push(p.x - rx * hw, 0, p.z - rz * hw);
-    rv.push(p.x + rx * hw, 0, p.z + rz * hw);
-    ruv.push(0, p.cum / 8, 1, p.cum / 8);
+  /* --- run-off, between the kerb and the barrier --- */
+  var runMat = new T.MeshLambertMaterial({
+    map: grainTexture(track.runoff || 0x4a463f, 24, 26, 5.1)
+  });
+  for(var rs = -1; rs <= 1; rs += 2){
+    trackGroup.add(band(pts, n, { off: hw * rs, y: -0.01 },
+                                { off: WALL * rs, y: -0.03 }, runMat, 9));
   }
-  for(var j = 0; j < n; j++){
-    var a = j * 2, b = ((j + 1) % n) * 2;
-    ri.push(a, b, a + 1, b, b + 1, a + 1);
+
+  /* --- the road --- */
+  trackGroup.add(band(pts, n, { off: -hw, y: 0 }, { off: hw, y: 0 },
+    new T.MeshLambertMaterial({ map: grainTexture(0x45484f, 11, 7, 2.3) }), 7));
+
+  /* --- a painted line down each edge of it --- */
+  var lineMat = new T.MeshLambertMaterial({ color: 0xcfd6de });
+  for(var ls = -1; ls <= 1; ls += 2){
+    trackGroup.add(band(pts, n, { off: (hw - 0.22) * ls, y: 0.012 },
+                                { off: (hw - 0.02) * ls, y: 0.012 }, lineMat, 8));
   }
-  var road = new T.BufferGeometry();
-  road.setAttribute('position', new T.Float32BufferAttribute(rv, 3));
-  road.setAttribute('uv', new T.Float32BufferAttribute(ruv, 2));
-  road.setIndex(ri);
-  road.computeVertexNormals();
-  trackGroup.add(new T.Mesh(road, new T.MeshLambertMaterial({ color: 0x45484f })));
 
   /* --- kerbs, only where it actually bends --- */
   var kerbGeo = new T.BoxGeometry(1.5, 0.12, SPACING * 1.02);
@@ -341,24 +536,39 @@ function buildTrackMesh(track){
   line.rotation.z = -pts[0].dir;
   trackGroup.add(line);
 
-  /* --- barrier posts, so the edge of the road reads at speed --- */
-  var postGeo = new T.BoxGeometry(0.34, 1.05, 0.34);
-  var postMat = new T.MeshLambertMaterial({ color: 0x9aa4b2 });
-  var posts = new T.InstancedMesh(postGeo, postMat, Math.ceil(n / 3) * 2 + 4);
-  var d2 = new T.Object3D();
-  var pc = 0;
-  for(var b2 = 0; b2 < n; b2 += 3){
-    var bp = pts[b2];
-    var bx = Math.cos(bp.dir), bz = -Math.sin(bp.dir);
-    for(var s2 = -1; s2 <= 1; s2 += 2){
-      d2.position.set(bp.x + bx * (hw + 2.2) * s2, 0.5, bp.z + bz * (hw + 2.2) * s2);
-      d2.rotation.set(0, bp.dir, 0);
-      d2.updateMatrix();
-      posts.setMatrixAt(pc++, d2.matrix);
+  /* --- the barrier, standing exactly where the wall is --- */
+  if(!track.open){
+    var railMat = new T.MeshLambertMaterial({ color: 0x9199a6, side: T.DoubleSide });
+    var rail2 = new T.MeshLambertMaterial({ color: 0x6e7684, side: T.DoubleSide });
+    for(var bs = -1; bs <= 1; bs += 2){
+      trackGroup.add(band(pts, n, { off: WALL * bs, y: 0.52 },
+                                  { off: WALL * bs, y: 0.86 }, railMat, 6));
+      trackGroup.add(band(pts, n, { off: WALL * bs, y: 0.2 },
+                                  { off: WALL * bs, y: 0.4 }, rail2, 6));
     }
+
+    var postGeo = new T.BoxGeometry(0.2, 0.95, 0.2);
+    var postMat = new T.MeshLambertMaterial({ color: 0x5c636f });
+    var posts = new T.InstancedMesh(postGeo, postMat, Math.ceil(n / 3) * 2 + 4);
+    var d2 = new T.Object3D();
+    var pc = 0;
+    for(var b2 = 0; b2 < n; b2 += 3){
+      var bp = pts[b2];
+      var bx = Math.cos(bp.dir), bz = -Math.sin(bp.dir);
+      for(var s2 = -1; s2 <= 1; s2 += 2){
+        d2.position.set(bp.x + bx * (WALL + 0.16) * s2, 0.47,
+                        bp.z + bz * (WALL + 0.16) * s2);
+        d2.rotation.set(0, bp.dir, 0);
+        d2.updateMatrix();
+        posts.setMatrixAt(pc++, d2.matrix);
+      }
+    }
+    posts.count = pc;
+    trackGroup.add(posts);
   }
-  posts.count = pc;
-  trackGroup.add(posts);
+
+  /* --- and whatever stands beyond it --- */
+  buildScenery(track, pts, n, trackGroup);
 
   scene.add(trackGroup);
 }
