@@ -173,6 +173,59 @@ were not - a hatchback stood 1.08 m when the car it is drawn from stands
 the only things built to the right height, which is exactly why they were
 the only things that looked like vehicles.
 
+## How it looks
+
+Low-poly, deliberately, and none of the work below is about adding polygons.
+
+**The cars.** A headlight is a dark housing sunk into the nose, a lens
+sitting proud in it and a lit strip under that, because a headlight on a
+real car is a hole in the bodywork with something shiny at the bottom of
+it — as one flat bright rectangle the whole car read as a toy. Grilles are
+drawn rather than built, the flanks carry door shuts and a handle on each
+door, and the rocker panel is body-coloured, which it is on nearly every
+real car and which stopped every car looking like it was sitting in its own
+shadow.
+
+**The wheels** went the other way, from five meshes each to two. A wheel is
+the one part of a car that is nearly flat and seen nearly face-on, so it is
+the one part where a picture does the job properly: five spokes with the
+light falling off down each, lug nuts, a brake disc turning behind them and
+a caliper over it, all drawn once into a canvas per rim colour. Twenty
+meshes a car became eight, and it looks far better than the geometry did.
+
+**The paint reflects something.** Six 32-pixel canvases make a cube of sky,
+horizon and ground, and that is the difference between a red shape and a red
+car. It is not really about shininess: a specular highlight is one bright
+spot where the sun is, but a car in daylight wears a dark band of road along
+its lower half and a pale band of sky along its upper, with the line between
+them running down the shoulder — and that band moves as the car turns.
+Nothing about a single light can produce it. There is a fill light opposite
+the sun as well, the way a photographer puts a reflector opposite the key,
+so the shaded flank of a car is still the colour you are being sold.
+
+**The body leans.** It rolls away from a corner, dips its nose under
+braking and sits back on the power. Cosmetic — every force was already
+resolved before the body moves — but not invented: the lean is driven by the
+actual cornering force the tyres are making, so a corner that is genuinely
+harder leans the car further and a better set of tyres leans it further
+still. About four degrees at a g, taken up over a fifth of a second, because
+the delay is the part you feel. The braking dip is nearly twice the
+acceleration squat, which is also true of cars.
+
+**The sky** had its bright end buried. The dome's texture runs from the
+zenith at the top to the point under your feet at the bottom, which puts the
+horizon exactly halfway down it — and every bright stop in the old gradient
+sat between 0.78 and 1.0, below the horizon and therefore hidden behind the
+ground. The visible sky came entirely from the top half: `#04060b` to
+`#0a1020`, a midnight sky over grass lit at noon. It is now blue overhead
+and hazy at the horizon, in the same colour the fog is set to, so distance
+fades into sky instead of into a band of something else. The sun's glow is
+painted in from the same vector the light uses, so the bright patch up there
+and the highlight on a bonnet agree with each other, and there is cloud.
+
+All of it together is about 60 draw calls and 15,000 triangles for a car on
+a track, which is less than the game drew before the wheels were rewritten.
+
 ## The modes
 
 **Career** and **quick race** are the laps. Two more are not:

@@ -92,14 +92,89 @@ function mat(colour, opts){
 
    Flat shading, deliberately. The panels below share vertices along their
    edges, and smooth normals would round every crease off into a lump. */
-function shiny(colour, spec, gloss, opts){
-  var key = 'P' + colour + '|' + spec + '|' + gloss + '|' + (opts ? JSON.stringify(opts) : '');
+function shiny(colour, spec, gloss, opts, reflect){
+  var key = 'P' + colour + '|' + spec + '|' + gloss + '|' + (reflect || 0) +
+            '|' + (opts ? JSON.stringify(opts) : '');
   if(MAT_CACHE[key]) return MAT_CACHE[key];
-  var m = new T.MeshPhongMaterial(Object.assign({
+  var def = Object.assign({
     color: colour, specular: spec, shininess: gloss, flatShading: true
-  }, opts || {}));
+  }, opts || {});
+  /* A reflection of the world, mixed in over the paint. Kept out of the
+     cache key as an object - it is one shared cube and the strength is the
+     only thing that varies, so the number is what the key needs. */
+  if(reflect){
+    def.envMap = envCube();
+    def.combine = T.MixOperation;
+    def.reflectivity = reflect;
+  }
+  var m = new T.MeshPhongMaterial(def);
   MAT_CACHE[key] = m;
   return m;
+}
+
+/* ------------------------------------------------------- what paint sees -- */
+
+/* Six small canvases making a cube of sky, horizon and ground for the paint
+   to reflect.
+
+   This is the difference between a red shape and a red car, and it is not
+   really about shininess. A specular highlight is one bright spot where the
+   sun happens to be; a car in daylight is covered in a dark band of ground
+   along its lower half and a pale band of sky along its upper, with the
+   line between them running along the shoulder - and that band moves as the
+   car turns. Nothing about a single light source can produce it. A cube map
+   can, for six 32-pixel canvases and no files.
+
+   The colours are the ones the track is actually built from, so a car
+   reflects the sky it is driving under rather than a generic grey room. */
+var ENV_CUBE = null;
+function envCube(){
+  if(ENV_CUBE) return ENV_CUBE;
+  var S = 32;
+  var faces = [];
+  function make(paint){
+    var cv = document.createElement('canvas');
+    cv.width = cv.height = S;
+    paint(cv.getContext('2d'), S);
+    return cv;
+  }
+  /* the four sides: ground below the horizon, sky above it */
+  function side(g, S){
+    /* Bright. The first version of this used the night-ish colours the sky
+       dome is painted in, and mixing those into the paint made every car
+       darker than it had been before it could reflect anything - which is
+       backwards. What a car reflects along its upper half is a sky that is
+       far brighter than the paint, and along its lower half a road that is
+       darker. The band between the two is the whole effect. */
+    var grd = g.createLinearGradient(0, 0, 0, S);
+    grd.addColorStop(0.00, '#6f8bb6');
+    grd.addColorStop(0.44, '#b9cbdf');
+    grd.addColorStop(0.50, '#4a5260');
+    grd.addColorStop(1.00, '#1c1f25');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, S, S);
+  }
+  var px = make(side), nx = make(side), pz = make(side), nz = make(side);
+  /* the sun lives in the sky face, up and to one side, so a panel tipping
+     towards it catches a bright patch rather than a flat wash */
+  var py = make(function(g, S){
+    g.fillStyle = '#5d7aa6';
+    g.fillRect(0, 0, S, S);
+    var sun = g.createRadialGradient(S * 0.3, S * 0.34, 1, S * 0.3, S * 0.34, S * 0.66);
+    sun.addColorStop(0, '#fffaf0');
+    sun.addColorStop(0.3, '#c9d6e8');
+    sun.addColorStop(1, 'rgba(93,122,166,0)');
+    g.fillStyle = sun;
+    g.fillRect(0, 0, S, S);
+  });
+  var ny = make(function(g, S){
+    g.fillStyle = '#191c21';
+    g.fillRect(0, 0, S, S);
+  });
+  faces = [px, nx, py, ny, pz, nz];
+  ENV_CUBE = new T.CubeTexture(faces);
+  ENV_CUBE.needsUpdate = true;
+  return ENV_CUBE;
 }
 /* The same colour, darkened, for whatever needs a quieter version of it. */
 function dim(colour, f){
@@ -113,9 +188,9 @@ function dim(colour, f){
    black and every car read as a bright top half sitting on a black one.
    Real paint in real shade still shows you what colour it is. */
 function paintOf(colour){
-  return shiny(colour, 0x5a5d66, 46, { emissive: dim(colour, 0.1) });
+  return shiny(colour, 0x5a5d66, 46, { emissive: dim(colour, 0.1) }, 0.33);
 }
-function chromeOf(colour){ return shiny(colour, 0xc2c8d4, 86); }
+function chromeOf(colour){ return shiny(colour, 0xc2c8d4, 86, null, 0.6); }
 
 /* A lamp is lit from the inside, so it is the one thing here that should not
    care which way the sun is. Basic material, no shading at all. */
@@ -133,7 +208,7 @@ function glassOf(){
      and a soft specular lights the whole windscreen at once, which reads
      as white card. A narrow one catches the sun only at the angle that
      should catch it, and glints as the car turns. */
-  return shiny(GLASS, 0x7f93a8, 220, { transparent: true, opacity: 0.82 });
+  return shiny(GLASS, 0x7f93a8, 220, { transparent: true, opacity: 0.82 }, 0.42);
 }
 
 /* Anything that takes a colour takes a material just as happily, so the
@@ -182,46 +257,208 @@ function panel(z0, z1, back, front, colour){
 
 /* ------------------------------------------------------------- the wheel -- */
 
-function buildWheel(radius, width, rimColour){
+/* A wheel face, drawn once into a canvas per rim colour.
+
+   It used to be geometry: a disc, two crossed bars for spokes and a hub, so
+   five meshes a wheel and twenty a car before the body had been built. A
+   wheel is the one part of a car that is nearly flat and seen nearly
+   face-on, which makes it the one part where a picture does the job
+   properly - five spokes with the light falling off down each one, lug
+   nuts, a brake disc turning behind them and a caliper over it. All of that
+   is two triangles and a texture, and it reads better than the geometry
+   did at any distance you ever see a wheel from.
+
+   Transparent outside the rim, so the tyre's own black face shows through
+   and the sidewall still reads as rubber. */
+var RIM_CACHE = {};
+function rimTexture(rimColour){
+  if(RIM_CACHE[rimColour]) return RIM_CACHE[rimColour];
+  var S = 256, R = S / 2;
+  var cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  var g = cv.getContext('2d');
+  var hex = function(n){ return '#' + ('000000' + (n >>> 0).toString(16)).slice(-6); };
+  var rim = hex(rimColour), lit = hex(dim(rimColour, 1.0)), shade = hex(dim(rimColour, 0.45));
+
+  g.translate(R, R);
+
+  /* Behind everything: the brake disc, and a caliper sitting over it at
+     about four o'clock where one usually is. */
+  g.fillStyle = '#2b2e34';
+  g.beginPath(); g.arc(0, 0, R * 0.70, 0, 6.2832); g.fill();
+  g.strokeStyle = '#3c4047';
+  g.lineWidth = R * 0.03;
+  for(var d = 0; d < 7; d++){
+    g.beginPath(); g.arc(0, 0, R * (0.30 + d * 0.055), 0, 6.2832); g.stroke();
+  }
+  g.fillStyle = '#6d2f2a';
+  g.beginPath();
+  g.arc(0, 0, R * 0.68, 0.5, 1.35);
+  g.arc(0, 0, R * 0.40, 1.35, 0.5, true);
+  g.closePath(); g.fill();
+
+  /* The rim: an outer lip catching the light at the top, a darker inner
+     barrel, then the spokes over both. */
+  var lipGrad = g.createLinearGradient(0, -R, 0, R);
+  lipGrad.addColorStop(0, lit);
+  lipGrad.addColorStop(0.55, rim);
+  lipGrad.addColorStop(1, shade);
+  g.strokeStyle = lipGrad;
+  g.lineWidth = R * 0.11;
+  g.beginPath(); g.arc(0, 0, R * 0.80, 0, 6.2832); g.stroke();
+  g.strokeStyle = shade;
+  g.lineWidth = R * 0.04;
+  g.beginPath(); g.arc(0, 0, R * 0.73, 0, 6.2832); g.stroke();
+
+  var SPOKES = 5;
+  for(var k = 0; k < SPOKES; k++){
+    g.save();
+    g.rotate(k * 6.2832 / SPOKES);
+    var sg = g.createLinearGradient(-R * 0.1, 0, R * 0.1, 0);
+    sg.addColorStop(0, shade);
+    sg.addColorStop(0.42, lit);
+    sg.addColorStop(1, rim);
+    g.fillStyle = sg;
+    g.beginPath();
+    g.moveTo(-R * 0.115, -R * 0.14);
+    g.lineTo(R * 0.115, -R * 0.14);
+    g.lineTo(R * 0.075, -R * 0.78);
+    g.lineTo(-R * 0.075, -R * 0.78);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+
+  /* The hub, and five nuts on it. */
+  var hg = g.createLinearGradient(0, -R * 0.3, 0, R * 0.3);
+  hg.addColorStop(0, lit);
+  hg.addColorStop(1, shade);
+  g.fillStyle = hg;
+  g.beginPath(); g.arc(0, 0, R * 0.235, 0, 6.2832); g.fill();
+  g.fillStyle = shade;
+  for(var n = 0; n < 5; n++){
+    var a = n * 6.2832 / 5 - 1.57;
+    g.beginPath();
+    g.arc(Math.cos(a) * R * 0.145, Math.sin(a) * R * 0.145, R * 0.034, 0, 6.2832);
+    g.fill();
+  }
+  g.fillStyle = '#1a1d22';
+  g.beginPath(); g.arc(0, 0, R * 0.072, 0, 6.2832); g.fill();
+
+  var t = new T.CanvasTexture(cv);
+  if(renderer) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  RIM_CACHE[rimColour] = t;
+  return t;
+}
+
+/* Tread, drawn round the circumference. A plain black cylinder is a plain
+   black cylinder however fast it is turning; blocks with a groove between
+   them tell you the wheel is rotating, which is most of what a tyre is
+   there to say. */
+var TREAD_TEX = null;
+function treadTexture(){
+  if(TREAD_TEX) return TREAD_TEX;
+  var W = 32, H = 32;
+  var cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  var g = cv.getContext('2d');
+  g.fillStyle = '#17191d';
+  g.fillRect(0, 0, W, H);
+  /* shoulder blocks down each edge, and a groove either side of centre */
+  g.fillStyle = '#23262b';
+  for(var i = 0; i < 4; i++){
+    g.fillRect(i * 8 + 1, 1, 6, 8);
+    g.fillRect(i * 8 + 1, H - 9, 6, 8);
+    g.fillRect(i * 8 + 3, 11, 4, 10);
+  }
+  g.fillStyle = '#0e1013';
+  g.fillRect(0, 9, W, 2);
+  g.fillRect(0, H - 11, W, 2);
+  var t = new T.CanvasTexture(cv);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.repeat.set(9, 1);
+  if(renderer) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  TREAD_TEX = t;
+  return t;
+}
+
+/* A grille, drawn rather than built. Slats are the sort of thing that
+   wants eight thin boxes and deserves none of them. */
+var GRILLE_CACHE = {};
+function grilleTexture(slats){
+  if(GRILLE_CACHE[slats]) return GRILLE_CACHE[slats];
+  var W = 64, H = 32;
+  var cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  var g = cv.getContext('2d');
+  g.fillStyle = '#0a0b0e';
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = '#262a31';
+  var gap = H / slats;
+  for(var i = 0; i < slats; i++){
+    g.fillRect(0, i * gap + gap * 0.22, W, gap * 0.4);
+  }
+  /* a highlight along the top edge of each slat, which is what makes a
+     grille read as metal rather than as stripes */
+  g.fillStyle = '#464c57';
+  for(var j = 0; j < slats; j++){
+    g.fillRect(0, j * gap + gap * 0.22, W, Math.max(1, gap * 0.12));
+  }
+  var t = new T.CanvasTexture(cv);
+  if(renderer) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  GRILLE_CACHE[slats] = t;
+  return t;
+}
+
+var GRILLE_MATS = {};
+function grilleMat(slats){
+  if(!GRILLE_MATS[slats]){
+    GRILLE_MATS[slats] = new T.MeshPhongMaterial({
+      color: 0xffffff, map: grilleTexture(slats), specular: 0x40454e, shininess: 30
+    });
+  }
+  return GRILLE_MATS[slats];
+}
+
+var TYRE_MAT = null;
+function tyreMat(){
+  if(!TYRE_MAT){
+    TYRE_MAT = new T.MeshPhongMaterial({
+      color: 0xffffff, map: treadTexture(), specular: 0x1c1f24, shininess: 8
+    });
+  }
+  return TYRE_MAT;
+}
+
+var RIM_MATS = {};
+function rimMat(rimColour){
+  if(!RIM_MATS[rimColour]){
+    RIM_MATS[rimColour] = new T.MeshBasicMaterial({
+      map: rimTexture(rimColour), transparent: true, side: T.DoubleSide
+    });
+  }
+  return RIM_MATS[rimColour];
+}
+
+/* Two meshes: a tyre, and a picture of a wheel on the outboard end of it.
+   The inboard side is never once seen from a chase camera - but which side
+   is outboard depends on which side of the car the wheel is bolted to, and
+   getting that wrong puts the back of every near-side wheel towards you. */
+function buildWheel(radius, width, rimColour, side){
   var g = new T.Group();
+
   var tyre = new T.Mesh(
-    new T.CylinderGeometry(radius, radius, width, 20),
-    mat(TYRE)
+    new T.CylinderGeometry(radius, radius, width, 24),
+    tyreMat()
   );
   tyre.rotation.z = Math.PI / 2;        // lay the cylinder on its side
   g.add(tyre);
 
-  /* Everything else is outboard only. The inside face of a wheel is never
-     once seen from a chase camera, and the budget is better spent on the
-     side that is: a rim set inside the tyre so a sidewall shows round it,
-     four spokes off two crossed bars, and a hub over the middle of them. */
-  var out = width / 2 + 0.004;
-
-  var face = new T.Mesh(
-    new T.CylinderGeometry(radius * 0.72, radius * 0.72, 0.03, 14),
-    chromeOf(rimColour)
-  );
-  face.rotation.z = Math.PI / 2;
-  face.position.x = out;
+  var face = new T.Mesh(new T.PlaneGeometry(radius * 2, radius * 2),
+                        rimMat(rimColour));
+  face.rotation.y = (side < 0 ? -1 : 1) * Math.PI / 2;
+  face.position.x = (side < 0 ? -1 : 1) * (width / 2 + 0.006);
   g.add(face);
-
-  for(var k = 0; k < 2; k++){
-    var bar = new T.Mesh(
-      new T.BoxGeometry(0.04, radius * 1.36, 0.075),
-      chromeOf(rimColour)
-    );
-    bar.position.x = out + 0.012;
-    bar.rotation.x = k * Math.PI / 2;
-    g.add(bar);
-  }
-
-  var hub = new T.Mesh(
-    new T.CylinderGeometry(radius * 0.2, radius * 0.2, 0.05, 10),
-    chromeOf(rimColour)
-  );
-  hub.rotation.z = Math.PI / 2;
-  hub.position.x = out + 0.022;
-  g.add(hub);
 
   return g;
 }
@@ -265,12 +502,24 @@ function shadowTexture(){
   var c = document.createElement('canvas');
   c.width = c.height = 64;
   var g = c.getContext('2d');
+  /* Darkest down the middle where the floor of the car is closest to the
+     road, and darker again at the four corners where a tyre is actually
+     touching it. One even blob read as a car hovering over a smudge. */
   var grd = g.createRadialGradient(32, 32, 1, 32, 32, 31);
-  grd.addColorStop(0, 'rgba(0,0,0,0.5)');
-  grd.addColorStop(0.5, 'rgba(0,0,0,0.3)');
+  grd.addColorStop(0, 'rgba(0,0,0,0.46)');
+  grd.addColorStop(0.55, 'rgba(0,0,0,0.26)');
   grd.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = grd;
   g.fillRect(0, 0, 64, 64);
+  var spots = [[20, 15], [44, 15], [20, 49], [44, 49]];
+  for(var i = 0; i < spots.length; i++){
+    var t = g.createRadialGradient(spots[i][0], spots[i][1], 0.5,
+                                   spots[i][0], spots[i][1], 10);
+    t.addColorStop(0, 'rgba(0,0,0,0.5)');
+    t.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = t;
+    g.fillRect(spots[i][0] - 10, spots[i][1] - 10, 20, 20);
+  }
   SHADOW_TEX = new T.CanvasTexture(c);
   return SHADOW_TEX;
 }
@@ -295,6 +544,11 @@ function buildCar(carKey, looks, lift){
   var hull = new T.Group();
   hull.position.y = b.ride + lift;
   root.add(hull);
+  /* The body is kept separate from the wheels so it can lean on them. It
+     rotates about its own origin, which sits on the centreline at ride
+     height - near enough where a real roll centre is that the car pivots
+     where it looks like it should. */
+  root.userData.hull = hull;
 
   var L = b.len, W = b.wide, hw = W / 2;
   var mid = L - b.nose - b.tail;
@@ -355,19 +609,39 @@ function buildCar(carKey, looks, lift){
   }
 
   /* ---- lights, grille and pipes ---- */
+
+  /* A lamp is three things, not one: a dark housing sunk into the body, a
+     lens sitting proud in it, and a bright element behind the lens. One
+     flat rectangle of light had the whole car reading as a toy, because a
+     headlight on a real car is a hole in the bodywork with something shiny
+     at the bottom of it. */
   var lz = zF + b.nose * 0.74;
   var bz = zR - b.tail * 0.88;
   for(var s = -1; s <= 1; s += 2){
-    hull.add(box(0.3, 0.085, 0.05, lampOf(0xfff0c8), s * W * 0.28, b.hood * 0.6, lz));
-    hull.add(box(0.26, 0.075, 0.04, lampOf(0xd03028), s * W * 0.3, b.hood * 0.7, bz));
+    /* headlight: housing, lens, and a strip of running light under it */
+    hull.add(box(0.34, 0.115, 0.055, SHADE, s * W * 0.28, b.hood * 0.6, lz - 0.012));
+    hull.add(box(0.30, 0.082, 0.045, lampOf(0xf2ecd8), s * W * 0.28, b.hood * 0.605, lz));
+    hull.add(box(0.26, 0.018, 0.04, lampOf(0xbfd8ff), s * W * 0.28, b.hood * 0.52, lz + 0.004));
+    /* an indicator out at the corner, amber, where they all are */
+    hull.add(box(0.075, 0.05, 0.04, lampOf(0xd98018), s * W * 0.44, b.hood * 0.58, lz - 0.03));
+
+    /* tail light: the same idea in red, with a darker surround */
+    hull.add(box(0.30, 0.105, 0.045, SHADE, s * W * 0.3, b.hood * 0.7, bz + 0.01));
+    hull.add(box(0.26, 0.072, 0.04, lampOf(0xc8251d), s * W * 0.3, b.hood * 0.7, bz));
+    hull.add(box(0.085, 0.03, 0.035, lampOf(0xe8e2d4), s * W * 0.22, b.hood * 0.64, bz + 0.002));
   }
   /* a bar between the tail lights, the way everything has had since 2015 */
   hull.add(box(W * 0.44, 0.035, 0.03, lampOf(0x8e1c18), 0, b.hood * 0.7, bz));
 
-  hull.add(box(W * 0.44, b.hood * 0.2, 0.05, SHADE, 0, b.hood * 0.44,
-               zF + b.nose * 0.88));
-  hull.add(box(W * 0.58, b.hood * 0.16, 0.05, SHADE, 0, b.hood * 0.17,
-               zF + b.nose * 0.84));
+  /* The grille, and the intake under it. Both are one mesh carrying a
+     picture of slats; the upper one is finer than the lower, because that
+     is how they are made. */
+  var gUp = new T.Mesh(new T.BoxGeometry(W * 0.44, b.hood * 0.2, 0.05), grilleMat(5));
+  gUp.position.set(0, b.hood * 0.44, zF + b.nose * 0.88);
+  hull.add(gUp);
+  var gLo = new T.Mesh(new T.BoxGeometry(W * 0.58, b.hood * 0.16, 0.05), grilleMat(3));
+  gLo.position.set(0, b.hood * 0.17, zF + b.nose * 0.84);
+  hull.add(gLo);
 
   for(var sp = -1; sp <= 1; sp += 2){
     var pipe = new T.Mesh(
@@ -402,9 +676,40 @@ function buildCar(carKey, looks, lift){
     hull.add(pb);
   }
 
-  /* a sill each side, to kill the floating-brick look */
+  /* A rocker panel each side, to kill the floating-brick look. Body
+     coloured, because on nearly every car it is - as a dark plank it put a
+     black band down the whole flank and made every car look like it was
+     sitting in its own shadow. The dark part is the thin shut line under
+     it, which is all that should be dark. */
   for(var s2 = -1; s2 <= 1; s2 += 2){
-    hull.add(box(0.1, b.hood * 0.5, L * 0.56, DARK, s2 * hw, b.hood * 0.16, 0));
+    hull.add(box(0.07, b.hood * 0.34, L * 0.56, skin, s2 * hw, b.hood * 0.21, 0));
+    hull.add(box(0.075, 0.022, L * 0.56, SHADE, s2 * hw, b.hood * 0.05, 0));
+  }
+
+  /* Door shuts and a handle on each one. A flank with no line down it is a
+     panel; two lines and something to pull turn it into a door, and it is
+     the cheapest detail on the whole car - a shut is a dark sliver a
+     centimetre wide sunk into the side.
+
+     Where they go follows the cabin, not the car: the front shut sits just
+     behind the windscreen and the rear one at the back of the glass, so a
+     long-cabin saloon gets two doors a side and a short-cabin coupe gets
+     one that reaches most of the way back. */
+  var longCab = b.cabL > 1.8 && !b.bed;
+  var shutZ = longCab
+    ? [cz1 - b.cabL * 0.06, b.cabF - b.cabL * 0.04, cz0 + b.cabL * 0.04]
+    : [cz1 - b.cabL * 0.06, cz0 + b.cabL * 0.1];
+  for(var sd = -1; sd <= 1; sd += 2){
+    for(var q = 0; q < shutZ.length; q++){
+      hull.add(box(0.016, (b.hood - b.ride * 0.2) * 0.74, 0.014, SHADE,
+                   sd * (hw - 0.005), b.hood * 0.52, shutZ[q]));
+    }
+    /* one handle per door, tucked just under the glass line */
+    for(var q2 = 0; q2 < shutZ.length - 1; q2++){
+      var mz = (shutZ[q2] + shutZ[q2 + 1]) / 2;
+      hull.add(box(0.022, 0.035, 0.13, chromeOf(0x9aa2ae),
+                   sd * (hw + 0.004), b.hood * 0.8, mz));
+    }
   }
 
   /* side skirts, sitting just outboard of whatever the arches are doing */
@@ -475,7 +780,7 @@ function buildCar(carKey, looks, lift){
     var z = spots[i][0], side = spots[i][1];
     var holder = new T.Group();                 // steering turns this
     holder.position.set(side * halfTrack, wr, z);
-    var w = buildWheel(wr, ww, rim);
+    var w = buildWheel(wr, ww, rim, side);
     holder.add(w);
     root.add(holder);
     root.userData.wheels.push(w);
@@ -510,7 +815,7 @@ function buildCar(carKey, looks, lift){
 
 /* Spin the wheels and turn the front pair. Called every frame per car, so it
    stays arithmetic and touches nothing it does not have to. */
-function animateCar(obj, speed, steer, dt){
+function animateCar(obj, speed, steer, dt, roll, pitch){
   var u = obj.userData;
   if(!u || !u.wheels) return;
   var spin = (speed * dt) / 0.33;
@@ -519,6 +824,12 @@ function animateCar(obj, speed, steer, dt){
      is handed is positive for right. The front wheels used to point the way
      the car was not going, which is a quiet confirmation of the same slip. */
   for(var j = 0; j < u.steered.length; j++) u.steered[j].rotation.y = -steer * 0.44;
+  /* The body leans and dips; the wheels stay on the road, because they are
+     on the root and the body is not. */
+  if(u.hull){
+    u.hull.rotation.z = roll || 0;
+    u.hull.rotation.x = pitch || 0;
+  }
 }
 
 /* ---------------------------------------------------------- portraits -- */
@@ -565,10 +876,17 @@ function thumbRig(){
     /* Lit from over the camera's left shoulder, where a photographer would
        put the light: the highlight then runs along the shoulder line
        instead of sitting in the middle of the roof. */
-    var sun = new T.DirectionalLight(0xfff4e2, 1.3);
+    var sun = new T.DirectionalLight(0xfff4e2, 1.15);
     sun.position.set(-9, 11, 10);
     sc.add(sun);
-    sc.add(new T.HemisphereLight(0x8ea6cc, 0x191c22, 0.85));
+    /* A fill from the other side at a third of the strength, the way a
+       photographer puts a reflector opposite the light. Without it the
+       shaded flank of every car went to the same near-black and the colour
+       you are being sold only existed on one side of the car. */
+    var fill = new T.DirectionalLight(0xbcd0f0, 0.42);
+    fill.position.set(8, 4, -7);
+    sc.add(fill);
+    sc.add(new T.HemisphereLight(0x8ea6cc, 0x191c22, 0.72));
     THUMB.ren = ren;
     THUMB.scene = sc;
     THUMB.cam = new T.PerspectiveCamera(18.8, THUMB_W / THUMB_H, 0.4, 120);

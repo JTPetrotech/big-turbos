@@ -345,7 +345,7 @@ function raceStep(dt){
     if(!c.obj) continue;
     c.obj.position.set(c.x, 0, c.z);
     c.obj.rotation.y = c.yaw;
-    animateCar(c.obj, c.vf, c.steer, dt);
+    animateCar(c.obj, c.vf, c.steer, dt, c.roll, c.pitch);
   }
 
   /* Once you are home the race is over, but the field should still be moving

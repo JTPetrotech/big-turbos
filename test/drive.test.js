@@ -731,4 +731,96 @@ H.ok(downTheStrip(shortGears) < asBuilt, 'short gears really do get there sooner
 H.ok(downTheStrip(longGears) > asBuilt, 'and long gears really do take longer',
      asBuilt.toFixed(2) + 's -> ' + downTheStrip(longGears).toFixed(2) + 's');
 
+/* -------------------------------------------- which way the body leans -- */
+/* The same trap the steering fell into, one layer further out: the lean is a
+   rotation applied by three.js, nothing headless ever looks at it, and so it
+   could sit backwards forever with every other test still passing. A car
+   that leans INTO a corner looks wrong in a way nobody can name and
+   everybody notices.
+
+   So this works out, from the path the car actually drove, which way the
+   turn centre lies, and insists the body's low side is the far one. Nothing
+   here repeats the formula the physics uses: the centre comes out of two
+   velocity samples, the car's own left comes out of the same body-to-world
+   mapping stepCar integrates with, and which side a roll lowers comes out
+   of how three.js rotates about Z - a point at +x goes to (cos r, sin r),
+   so a positive roll lifts +x and drops the other side.
+
+   Measured in a corner and not in a spin. Hold full lock in this car for a
+   second and a half and it is round backwards with the velocity pointing
+   somewhere else entirely; sample the path then and it reports the turn
+   going the other way, which is true of the path and says nothing about the
+   lean. The slide guard below is what keeps this honest - if a future
+   change makes the car let go earlier, the guard fails rather than the
+   measurement quietly going to nonsense. */
+
+console.log('\n  which way the body leans');
+
+const corner = (steer) => {
+  const c = ctx.makeCar('coupe', {});
+  ctx.stageDrag([c], open);
+  const straight = { throttle: 1, brake: 0, steer: 0, hand: false };
+  const held = { throttle: 1, brake: 0, steer: steer, hand: false };
+  for(let t = 0; t < 2; t += DT) ctx.stepCar(c, open, straight, DT);
+  for(let t = 0; t < 0.4; t += DT) ctx.stepCar(c, open, held, DT);
+
+  const x1 = c.x, z1 = c.z;
+  for(let t = 0; t < 0.1; t += DT) ctx.stepCar(c, open, held, DT);
+  const vx1 = c.x - x1, vz1 = c.z - z1;
+  const x2 = c.x, z2 = c.z;
+  for(let t = 0; t < 0.1; t += DT) ctx.stepCar(c, open, held, DT);
+  const vx2 = c.x - x2, vz2 = c.z - z2;
+
+  /* How the velocity turned over that slice points at the centre. Speeding
+     up adds a component along the heading, which is exactly perpendicular
+     to the car's left and so contributes nothing to the dot below. */
+  const cx = vx2 - vx1, cz = vz2 - vz1;
+  const lx = Math.cos(c.yaw), lz = -Math.sin(c.yaw);
+  return {
+    roll: c.roll,
+    accL: c.accL,
+    slide: Math.abs(c.vl) / Math.max(Math.abs(c.vf), 1),
+    mph: c.vf * 2.23694,
+    leftTowardsCentre: lx * cx + lz * cz
+  };
+};
+
+/* Half lock, not full. At full lock this car is drifting at half its own
+   road speed, which is a fine way to leave a car park and a poor way to
+   measure a corner. */
+for(const way of [['right', 0.5], ['left', -0.5]]){
+  const r = corner(way[1]);
+  H.ok(r.slide < 0.35, 'going ' + way[0] + ', the car is cornering and not spinning',
+       'sliding at ' + (r.slide * 100).toFixed(0) + ' per cent of its forward speed');
+  H.ok(Math.abs(r.roll) > 0.004, 'and the body actually leans',
+       (r.roll * 57.3).toFixed(2) + ' degrees at ' + r.mph.toFixed(0) + ' mph');
+  /* Positive roll lifts the car's left. If its left is the inside of the
+     turn then the outside is its right, and the right is what must drop -
+     so the roll must be positive. And the other way round. */
+  const wantPositive = r.leftTowardsCentre > 0;
+  H.ok(wantPositive ? r.roll > 0 : r.roll < 0,
+       'away from the corner rather than into it',
+       'the car own left is on the ' + (wantPositive ? 'inside' : 'outside') +
+       ' and the body put its left side ' + (r.roll > 0 ? 'up' : 'down'));
+  H.ok(Math.abs(r.accL) < 1.6 * 9.81,
+       'and it is leaning on a force the tyres could actually make',
+       (Math.abs(r.accL) / 9.81).toFixed(2) + ' g');
+  H.ok(Math.abs(r.roll) * 57.3 < 7, 'by about as far as a car on springs would',
+       (Math.abs(r.roll) * 57.3).toFixed(2) + ' degrees');
+}
+
+/* And the nose. Three.js rotating about +x sends a point at +z to
+   y = -sin(pitch), and +z is the front of the car, so a positive pitch is a
+   nose that has gone down. Braking should; accelerating should not. */
+const diving = ctx.makeCar('coupe', {});
+ctx.stageDrag([diving], open);
+for(let t = 0; t < 4; t += DT) ctx.stepCar(diving, open, { throttle: 1, brake: 0, steer: 0, hand: false }, DT);
+const squat = diving.pitch;
+for(let t = 0; t < 0.8; t += DT) ctx.stepCar(diving, open, { throttle: 0, brake: 1, steer: 0, hand: false }, DT);
+const dive = diving.pitch;
+H.ok(squat < 0, 'on the power the nose comes up', (squat * 57.3).toFixed(2) + ' degrees');
+H.ok(dive > 0, 'and on the brakes it goes down', (dive * 57.3).toFixed(2) + ' degrees');
+H.ok(dive > Math.abs(squat), 'further than it ever squats, which is how cars are',
+     (Math.abs(squat) * 57.3).toFixed(2) + ' up against ' + (dive * 57.3).toFixed(2) + ' down');
+
 H.done();

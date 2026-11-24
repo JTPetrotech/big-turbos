@@ -238,14 +238,21 @@ function finishNearest(track, x, z, i, d2){
 var scene = null, camera = null, renderer = null;
 var trackGroup = null;
 
+/* One sun, named once. The light reads it and so does the glow painted
+   into the sky, so the bright patch up there is always where the shadows
+   say it should be. */
+var SUN_AT = new T.Vector3(-70, 120, 50);
+
 function initScene(){
   scene = new T.Scene();
-  scene.background = new T.Color(0x05070d);
+  scene.background = new T.Color(0xb3c3d1);
   /* Fog the colour of the horizon rather than of the zenith, so distance
      fades into the sky instead of into a dark band across the middle of
      it. Pushed back as well: 420 m put the far side of Ridgeback in a
      fog bank you could not see a corner through. */
-  scene.fog = new T.Fog(0x232a3a, 240, 620);
+  /* The colour the sky is AT the horizon, so the far end of a straight
+     fades into sky rather than into a dark band across the middle of it. */
+  scene.fog = new T.Fog(0xb3c3d1, 230, 640);
 
   camera = new T.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.4, 900);
 
@@ -255,10 +262,17 @@ function initScene(){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   document.body.appendChild(renderer.domElement);
 
-  var sun = new T.DirectionalLight(0xfff2dd, 1.05);
-  sun.position.set(-70, 120, 50);
+  var sun = new T.DirectionalLight(0xfff2dd, 1.0);
+  sun.position.copy(SUN_AT);
   scene.add(sun);
-  scene.add(new T.HemisphereLight(0x6e86b0, 0x14160e, 0.55));
+  /* A cool fill from the opposite side, standing in for the light the sky
+     bounces off everything. One sun and nothing else left the shaded side
+     of every car and every barrier at the hemisphere light's floor colour,
+     which is why the grid used to look like cut-outs. */
+  var fill = new T.DirectionalLight(0x9fb8e0, 0.34);
+  fill.position.set(60, 40, -70);
+  scene.add(fill);
+  scene.add(new T.HemisphereLight(0x6e86b0, 0x14160e, 0.5));
 
   /* A gradient dome instead of a flat background colour. It is drawn with
      fog off and depth writing off, so it sits behind everything without
@@ -285,20 +299,88 @@ function onResize(){
    meant to fade things INTO the sky, and depth writing is off so it never
    has to be sorted against anything. */
 function skyDome(){
+  /* The dome's texture runs top to bottom from the zenith to the point
+     under your feet, which puts the HORIZON exactly halfway down it - and
+     that is where the old gradient went wrong. Every bright stop in it sat
+     between 0.78 and 1.0, which is below the horizon and therefore behind
+     the ground, so the whole of the visible sky came from the top half:
+     #04060b to #0a1020, a midnight sky over grass lit at noon. The sun has
+     not moved; the sky just stopped hiding its bright end under the world.
+
+     So: blue overhead, pale and hazy as it comes down to the horizon, and
+     the haze is the colour the fog is set to, which is what makes distance
+     fade into sky instead of into a band of something else. A glow where
+     the sun actually is, worked out from the same vector the light uses,
+     so the bright patch in the sky and the highlight on a car's bonnet
+     agree with one another. */
+  var W = 128, H = 128;
   var c = document.createElement('canvas');
-  c.width = 8; c.height = 128;
+  c.width = W; c.height = H;
   var g = c.getContext('2d');
-  var grd = g.createLinearGradient(0, 0, 0, 128);
-  grd.addColorStop(0.00, '#04060b');
-  grd.addColorStop(0.45, '#0a1020');
-  grd.addColorStop(0.78, '#1a2132');
-  grd.addColorStop(0.95, '#2b3345');
-  grd.addColorStop(1.00, '#39405070'.slice(0, 7));
+
+  var grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0.00, '#24406f');
+  grd.addColorStop(0.22, '#3f6696');
+  grd.addColorStop(0.40, '#7f9fc2');
+  grd.addColorStop(0.49, '#c3d2dd');
+  grd.addColorStop(0.53, '#8e9a96');
+  grd.addColorStop(1.00, '#2a2e2c');
   g.fillStyle = grd;
-  g.fillRect(0, 0, 8, 128);
+  g.fillRect(0, 0, W, H);
+
+  /* Cloud. Each one is a handful of soft blobs on top of each other, which
+     is all a cloud has ever needed to be at this distance, and they sit in
+     the band between a third of the way up and the horizon because that is
+     where you look. Placed off hash01, so the sky over Mill Road is the
+     same sky every time you drive it. Drawn twice near the left and right
+     edges where a cloud would otherwise be cut in half by the seam. */
+  function puff(cx, cy, r, a){
+    var p = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+    p.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+    p.addColorStop(0.55, 'rgba(246,249,252,' + (a * 0.5) + ')');
+    p.addColorStop(1, 'rgba(230,238,246,0)');
+    g.fillStyle = p;
+    g.beginPath(); g.arc(cx, cy, r, 0, 6.2832); g.fill();
+  }
+  for(var cl = 0; cl < 11; cl++){
+    var bx = hash01(cl * 1.7 + 0.3) * W;
+    var by = H * (0.17 + hash01(cl * 2.9 + 1.1) * 0.27);
+    var bw = W * (0.055 + hash01(cl * 4.1 + 2.3) * 0.05);
+    var alpha = 0.26 + hash01(cl * 5.3 + 3.7) * 0.4;
+    for(var q = 0; q < 5; q++){
+      var ox = (hash01(cl * 7.1 + q * 1.3) - 0.5) * bw * 2.6;
+      var oy = (hash01(cl * 9.7 + q * 2.1) - 0.5) * bw * 0.7;
+      var rr = bw * (0.45 + hash01(cl * 3.3 + q * 4.7) * 0.6);
+      puff(bx + ox, by + oy, rr, alpha);
+      if(bx + ox < bw * 2) puff(bx + ox + W, by + oy, rr, alpha);
+      if(bx + ox > W - bw * 2) puff(bx + ox - W, by + oy, rr, alpha);
+    }
+  }
+
+  /* Where the sun is. three.js lays a sphere out with x = -cos(phi) and
+     z = sin(phi) as u runs 0..1, and the top of the canvas is the zenith,
+     so the sun at SUN_AT comes out at these two fractions. */
+  var sx = SUN_AT.x, sy = SUN_AT.y, sz = SUN_AT.z;
+  var u = Math.atan2(sz, -sx) / (Math.PI * 2);
+  if(u < 0) u += 1;
+  var v = Math.acos(sy / Math.sqrt(sx * sx + sy * sy + sz * sz)) / Math.PI;
+  /* Drawn three times, a canvas width apart, for the same reason the
+     clouds are: the sun sits near the seam, and a radial gradient painted
+     once is sliced off at the edge of the canvas and shows up in the sky
+     as a straight vertical line with half a sun on one side of it. */
+  for(var sd = -1; sd <= 1; sd++){
+    var gx = (u + sd) * W;
+    var glow = g.createRadialGradient(gx, v * H, 1, gx, v * H, W * 0.34);
+    glow.addColorStop(0.00, 'rgba(255,250,235,0.95)');
+    glow.addColorStop(0.18, 'rgba(226,228,224,0.45)');
+    glow.addColorStop(1.00, 'rgba(200,214,226,0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, W, H);
+  }
+
   var t = new T.CanvasTexture(c);
   var dome = new T.Mesh(
-    new T.SphereGeometry(620, 24, 16),
+    new T.SphereGeometry(620, 32, 20),
     new T.MeshBasicMaterial({ map: t, side: T.BackSide, fog: false,
                               depthWrite: false })
   );
@@ -447,11 +529,21 @@ function buildScenery(track, pts, n, group){
     return;
   }
 
+  /* Two kinds, in two greens. A wood of one tree repeated is a wallpaper;
+     splitting the same scatter in two and giving the halves different
+     colours and different heights costs one more instanced mesh and stops
+     the eye finding the pattern. */
   var trees = scatterSpots(track, pts, n, 3, 0.58, near, near + 36);
+  var dark = [], light = [];
+  for(var ti = 0; ti < trees.length; ti++){
+    (hash01(trees[ti].turn * 3.1) > 0.45 ? dark : light).push(trees[ti]);
+  }
   placeInstances(new T.CylinderGeometry(0.17, 0.26, 2.4, 6),
                  lam(0x3b2f24), trees, 1.2, 1, group);
   placeInstances(new T.ConeGeometry(1.85, 4.4, 7),
-                 lam(0x1f3a22), trees, 4.4, 1, group);
+                 lam(0x1f3a22), dark, 4.4, 1, group);
+  placeInstances(new T.ConeGeometry(1.6, 5.4, 7),
+                 lam(0x2f5230), light, 5.0, 1, group);
 }
 
 function buildTrackMesh(track){

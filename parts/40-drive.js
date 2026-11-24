@@ -36,6 +36,8 @@ function makeCar(carKey, parts, opts){
 
     lap: 0, along: 0, lastAlong: 0, hint: null, progress: 0,
     lateral: 0, off: false,
+    accF: 0, accL: 0,              // what the body is being asked to do
+    roll: 0, pitch: 0,             // and how far it has leaned about it
     nosLeft: stats.nosTime, nosOn: false,
 
     ai: !!opts.ai,
@@ -155,6 +157,48 @@ function stepCar(car, track, input, dt){
     car.yaw -= sign(car.vl) * (1 - s.stability) * Math.abs(car.vl) * 0.16 * dt;
   }
 
+  /* ---- what the body does about all of that ---- */
+
+  /* A car is not a block bolted to the road. It leans away from a corner,
+     dips its nose when you brake and sits back on its haunches when you
+     get on the power, and those three movements are most of how a driver
+     reads what the car is doing without looking at a single number.
+
+     Cosmetic - every force above has already been resolved and nothing
+     here feeds back into them - but not invented: the lean is driven by
+     the real cornering acceleration and the dip by the real one along the
+     car, so a corner that is genuinely harder leans the body further, and
+     a car with better brakes dips more because it is stopping harder.
+
+     Which way: positive rotation about Y turns a body to its left, so a
+     right-hand corner is yaw going down and vf * yawRate is negative. The
+     car's own left is +x - that is what makes lateral speed positive to
+     the left a few lines above - and a positive roll about Z lifts +x. So
+     a right-hand corner gives a negative roll, which drops the left side,
+     which is the outside of the turn. Which is what a car does. */
+  car.accF = af;
+  /* The sideways acceleration is the tyre force that killed the slip a few
+     lines up, not vf * yawRate - which is the same thing only while the car
+     is tracking, and wildly wrong the moment it is not. A coupe a second
+     into full lock is yawing fast with the velocity pointing somewhere else
+     entirely, and vf * yawRate read over three g for it: the body simply
+     sat on its lean stop. The tyre force cannot exceed the grip the tyres
+     have, because it IS that force, so the body now leans as far as the car
+     is actually cornering - and a better set of tyres leans it further,
+     which is both true and the right thing to be able to see. */
+  car.accL = -sign(car.vl) * killed / Math.max(dt, 1e-4);
+
+  /* About four degrees at a g, which is a road car on road springs, and
+     taken up over about a fifth of a second rather than instantly, because
+     that delay is the part you can feel. Braking dips nearly twice as far
+     as accelerating squats, which is also true, and is why the dip is the
+     one you notice. */
+  var rollWant = clamp(car.accL * 0.0072, -0.10, 0.10);
+  var pitchWant = clamp(-af * (af > 0 ? 0.0026 : 0.0047), -0.05, 0.055);
+  var settle = clamp(dt * 7, 0, 1);
+  car.roll += (rollWant - car.roll) * settle;
+  car.pitch += (pitchWant - car.pitch) * settle;
+
   /* ---- into the world ---- */
   var sy = Math.sin(car.yaw), cy = Math.cos(car.yaw);
   var vx = car.vf * sy + car.vl * cy;
@@ -240,6 +284,7 @@ function stageDrag(cars, track){
     car.z = p.z + rz * side;
     car.yaw = p.dir;
     car.vf = 0; car.vl = 0; car.yawRate = 0; car.steer = 0;
+    car.roll = 0; car.pitch = 0; car.accF = 0; car.accL = 0;
     car.lap = 0; car.hint = 0;
     car.along = 0; car.lastAlong = 0; car.progress = 0; car.lateral = side;
     car.finished = false; car.finishTime = null;
@@ -431,6 +476,7 @@ function gridUp(cars, track){
     car.z = p.z + rz * side;
     car.yaw = p.dir;
     car.vf = 0; car.vl = 0; car.yawRate = 0; car.steer = 0;
+    car.roll = 0; car.pitch = 0; car.accF = 0; car.accL = 0;
     car.lap = 0; car.hint = idx;
     car.along = along; car.lastAlong = along;
     car.progress = along - track.total;        // negative until the line
