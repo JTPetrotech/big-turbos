@@ -14,6 +14,7 @@ const DIR = __dirname;
 const PARTS = [
   '00-head.html',
   '05-padnav.js',
+  '06-arcade-save.js',
   '10-core.js',
   '20-track.js',
   '30-cars.js',
