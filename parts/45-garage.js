@@ -975,16 +975,43 @@ function looksFor(carKey){
   var l = SAVE.looks[carKey];
   if(l.kit === undefined) l.kit = 0;
   if(l.size === undefined) l.size = 0;
-  if(l.paint === null || l.paint === undefined) l.paint = defaultPaint(carKey);
+  if(l.paint === null || l.paint === undefined ||
+     l.paint > PAINTS.length) l.paint = defaultPaint(carKey);
   return l;
 }
 
-/* A new car arrives in its own colour rather than whatever the last one was. */
+/* The colours this particular car can wear: the shop's sixteen, and its own
+   on the end if it is not already one of them.
+
+   This used to be done by pushing the car's colour onto PAINTS itself and
+   writing down the index - and that index was a lie the moment you closed
+   the tab. PAINTS is rebuilt from its sixteen literals every load, and the
+   extra entries were only ever added for cars looksFor happened to be
+   asked about, in whatever order it was asked. So a save that said "paint
+   16" came back pointing at nothing, fell through to PAINTS[0], and every
+   car you had ever driven turned up in Signal red.
+
+   Built fresh per car instead and never stored, so slot 16 means the same
+   thing in the same car forever - and it is still a swatch you can see and
+   go back to, which a colour held outside the list would not have been. */
+function swatchesFor(carKey){
+  var own = CARS[carKey].colour;
+  for(var i = 0; i < PAINTS.length; i++) if(PAINTS[i].c === own) return PAINTS;
+  return PAINTS.concat([{ n: CARS[carKey].nick, c: own }]);
+}
+
+/* A new car arrives in its own colour rather than whatever the last one
+   was wearing. Reads the list; never changes it. */
 function defaultPaint(carKey){
   var want = CARS[carKey].colour;
   for(var i = 0; i < PAINTS.length; i++) if(PAINTS[i].c === want) return i;
-  PAINTS.push({ n: CARS[carKey].nick, c: want });
-  return PAINTS.length - 1;
+  return PAINTS.length;
+}
+
+/* The colour a set of looks comes out as, for a given car. */
+function paintColour(carKey, looks){
+  var pal = swatchesFor(carKey);
+  return (pal[looks && looks.paint] || pal[0]).c;
 }
 
 /* ------------------------------------------------------------- the career -- */

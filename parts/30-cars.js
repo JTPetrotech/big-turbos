@@ -284,7 +284,7 @@ function buildCar(carKey, looks, lift){
   var kit = kitAt(looks.kit || 0);
   var wsize = (WHEEL_SIZES[looks.size || 0] || WHEEL_SIZES[0]).d;
 
-  var paint = (PAINTS[looks.paint] || PAINTS[0]).c;
+  var paint = paintColour(carKey, looks);
   var rim = (WHEELS[looks.wheel] || WHEELS[1]).c;
   var stripe = (STRIPES[looks.stripe] || STRIPES[0]).c;
 
@@ -519,4 +519,123 @@ function animateCar(obj, speed, steer, dt){
      is handed is positive for right. The front wheels used to point the way
      the car was not going, which is a quiet confirmation of the same slip. */
   for(var j = 0; j < u.steered.length; j++) u.steered[j].rotation.y = -steer * 0.44;
+}
+
+/* ---------------------------------------------------------- portraits -- */
+
+/* A picture of each car, taken with the car builder itself.
+
+   Sixteen names in a list do not tell you which one is the wide one, which
+   one is the tall one or which one you are about to spend a hundred and
+   fifty thousand on. A drawn icon would have fixed that and introduced a
+   second description of a car - one that can quietly drift out of step with
+   the first, which is exactly why the garage reads its figures out of
+   carStats instead of a typed table. So these are photographs: the same
+   buildCar, the same bodies, the same paint and wheels you fitted, shot
+   three-quarters on.
+
+   One small renderer of its own, built the first time a picture is asked
+   for, and the result copied straight into a canvas sitting in the page.
+   Straight, because the obvious way round - render, toDataURL, hand the
+   string to an <img> - spends 43 of its 60 milliseconds encoding a PNG
+   nothing will ever save. Copying the pixels across takes one, so the
+   pictures cost about three milliseconds each and need no cache at all.
+
+   If the machine will not hand over a second WebGL context, paintCar says
+   so and the showroom goes back to being a list. */
+
+/* A wide frame, because a car is a wide thing. Shot into 4:3 the car was
+   a strip across the middle with sky above it and road below, and 93 per
+   cent of the picture was neither. Two to one, which is about the shape a
+   car turned three-quarters on actually makes once perspective has had its
+   way with it - squarer than the side-on silhouette you picture. */
+var THUMB_W = 152, THUMB_H = 76;
+var THUMB = { ren: null, scene: null, cam: null, dead: false };
+
+function thumbRig(){
+  if(THUMB.ren || THUMB.dead) return THUMB.ren;
+  try {
+    /* preserveDrawingBuffer because the whole point is to read the pixels
+       back out again afterwards. */
+    var ren = new T.WebGLRenderer({ antialias: true, alpha: true,
+                                    preserveDrawingBuffer: true });
+    ren.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    ren.setSize(THUMB_W, THUMB_H, false);
+    var sc = new T.Scene();
+    /* Lit from over the camera's left shoulder, where a photographer would
+       put the light: the highlight then runs along the shoulder line
+       instead of sitting in the middle of the roof. */
+    var sun = new T.DirectionalLight(0xfff4e2, 1.3);
+    sun.position.set(-9, 11, 10);
+    sc.add(sun);
+    sc.add(new T.HemisphereLight(0x8ea6cc, 0x191c22, 0.85));
+    THUMB.ren = ren;
+    THUMB.scene = sc;
+    THUMB.cam = new T.PerspectiveCamera(18.8, THUMB_W / THUMB_H, 0.4, 120);
+  } catch(e){
+    THUMB.dead = true;
+  }
+  return THUMB.ren;
+}
+
+/* Geometries only. Every material a car is made of comes out of MAT_CACHE
+   and is shared with the car you are driving, so disposing those here would
+   take the paint off the road as well. */
+function dropGeometry(obj){
+  obj.traverse(function(o){ if(o.geometry) o.geometry.dispose(); });
+}
+
+/* Photograph a car into a canvas that is already in the page. Answers
+   whether it managed it. */
+function paintCar(target, carKey, looks){
+  if(!target || !CARS[carKey]) return false;
+  if(!thumbRig()) return false;
+
+  looks = looks || showLooks(carKey);
+  var car = buildCar(carKey, looks, 0);
+  var b = BODIES[CARS[carKey].body] || BODIES.coupe;
+  THUMB.scene.add(car);
+
+  /* Every car is shot from the same spot rather than zoomed to fill its
+     card, so a pickup takes up most of the width of its picture and a
+     hatchback three fifths of it - which is true of them in a car park, and
+     is half of what you are trying to tell at a glance. Eight metres back
+     and about ten degrees up: roughly where you would stand to take the
+     photograph, low enough to be looking at the flank of the car rather
+     than down onto its roof. The lens is a long one - nineteen degrees, so
+     about a 135 mm - which is what it takes to fill the frame from eight
+     metres away and is what anyone photographing a car would reach for,
+     because a wide lens this close bends the body outwards. */
+  var aim = new T.Vector3(0, (b.ride + b.roof) * 0.50, -0.1);
+  var dir = new T.Vector3(-0.60, 0.17, 0.78).normalize().multiplyScalar(8.4);
+  THUMB.cam.position.copy(aim).add(dir);
+  THUMB.cam.lookAt(aim);
+  THUMB.ren.render(THUMB.scene, THUMB.cam);
+
+  var src = THUMB.ren.domElement;
+  if(target.width !== src.width){ target.width = src.width; target.height = src.height; }
+  var g = target.getContext('2d');
+  g.clearRect(0, 0, target.width, target.height);
+  g.drawImage(src, 0, 0);
+
+  THUMB.scene.remove(car);
+  dropGeometry(car);
+  return true;
+}
+
+/* What a car should be photographed wearing. One you have dressed wears
+   what you put on it; every other one wears the colour it arrives in.
+
+   Deliberately SAVE.looks and not looksFor, which would have been the
+   obvious call and is the wrong one: looksFor creates the entry it cannot
+   find, and that writes to the save. Photographing the showroom would then
+   have written sixteen entries into it every time you opened the door.
+   Taking a picture of something should not change it. */
+function showLooks(carKey){
+  var worn = SAVE.looks && SAVE.looks[carKey];
+  if(worn && worn.paint !== null && worn.paint !== undefined &&
+     worn.paint <= PAINTS.length) return worn;
+  return { paint: defaultPaint(carKey), wheel: worn ? worn.wheel : 1,
+           stripe: worn ? worn.stripe : 0, spoiler: worn ? worn.spoiler : false,
+           kit: worn ? worn.kit : 0, size: worn ? worn.size : 0 };
 }

@@ -205,6 +205,22 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 .row .cost{font-family:var(--display);font-size:20px;color:var(--amber);white-space:nowrap}
 .row .cost.have{color:var(--green)}
 .row .cost.cant{color:var(--red)}
+.row .chips{margin-top:7px}
+
+/* a car's own card: its photograph, then everything the garage knows */
+.row.car{gap:13px;padding:10px 12px}
+.row.car .shot{width:152px;height:76px;flex:0 0 auto;border-radius:9px;
+  border:1px solid var(--line);display:block;
+  background:radial-gradient(ellipse at 50% 74%,#1c222d,#0f121a)}
+.row.car.on .shot{border-color:#2f6b4f}
+@media (max-width:620px){
+  /* The picture goes above the name rather than beside it, because a
+     152 px photograph and a 21 px title do not both fit across a phone.
+     Width given and height left to the aspect, so the car is never
+     stretched to fill a box of the wrong shape. */
+  .row.car{flex-wrap:wrap}
+  .row.car .shot{width:100%;height:auto;aspect-ratio:2/1}
+}
 .chip{display:inline-block;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
   font-weight:800;padding:2px 7px;border-radius:999px;background:#141821;
   border:1px solid var(--line);color:var(--muted);margin-right:4px}
@@ -221,6 +237,12 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 .res tr.you td{color:var(--amber);font-weight:700}
 .res td.p{font-family:var(--display);font-size:20px;width:34px}
 .res td.t{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+/* which car that was: a thumbnail of the one that raced, in its own paint */
+.res td.car{color:var(--muted);font-size:11.5px}
+.res td.car span{vertical-align:middle}
+.res .tiny{width:56px;height:28px;border-radius:5px;vertical-align:middle;
+  margin-right:7px;border:1px solid var(--line);background:#12151c}
+@media (max-width:430px){ .res .tiny{display:none} }
 
 .tabs{display:flex;gap:5px;margin:14px 0 0;border-bottom:1px solid var(--line);padding-bottom:9px;
   flex-wrap:wrap}

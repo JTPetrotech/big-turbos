@@ -275,6 +275,65 @@ function openShowroom(){
   drawShowroom();
 }
 
+/* A car's portrait, ready to drop into a row. It goes in empty and gets
+   filled a frame at a time by fillShots below: sixteen of them take about a
+   second to take, and a showroom that freezes for a second when you open it
+   is worse than one whose pictures arrive over the next few frames. The
+   picture is decoration, so it is hidden from anything reading the page
+   aloud - the name beside it is the real label. */
+/* Portraits of cars that are not yours and are not stock - the four you
+   just raced, each in the paint it raced in. The looks cannot go in an
+   attribute, so they wait here and the frame carries the slot. Emptied at
+   the start of every list that uses it, so it does not grow all evening. */
+var SHOT_WEAR = [];
+function wornShot(carKey, looks, cls){
+  SHOT_WEAR.push(looks);
+  return '<canvas class="' + cls + '" data-shot="' + carKey + '" data-wear="' +
+         (SHOT_WEAR.length - 1) + '" aria-hidden="true"></canvas>';
+}
+
+/* A car's portrait, ready to drop into a row. It goes in as an empty frame
+   and is filled by fillShots once the list is on the page - the picture
+   needs a canvas that exists to be drawn into. It is decoration, so it is
+   hidden from anything reading the page aloud; the name beside it is the
+   real label. */
+function shotOf(carKey){
+  return '<canvas class="shot" data-shot="' + carKey + '" aria-hidden="true"></canvas>';
+}
+
+/* Fill every empty frame in a list, one per animation frame. A picture is
+   about three milliseconds, so sixteen of them could be done in one go -
+   but the showcase car is turning behind the menu while this happens, and
+   spreading the work keeps that turning smooth. A machine that will not
+   give us a second renderer gets no pictures and keeps its empty frames,
+   which is the showroom it had before they existed. */
+function fillShots(el){
+  var want = Array.prototype.slice.call(el.querySelectorAll('[data-shot]'));
+  function next(){
+    if(!want.length) return;
+    var frame = want.shift();
+    /* The list may have been redrawn under us - a card clicked, a car
+       bought - in which case this frame belongs to nothing any more. */
+    if(frame.isConnected){
+      var key = frame.getAttribute('data-shot');
+      var wear = frame.getAttribute('data-wear');
+      var ok = paintCar(frame, key, wear === null ? showLooks(key) : SHOT_WEAR[wear]);
+      if(!ok) return;
+      frame.removeAttribute('data-shot');
+    }
+    requestAnimationFrame(next);
+  }
+  requestAnimationFrame(next);
+}
+
+/* The three numbers that tell you how big the thing is, off the same BODIES
+   table the picture was taken from. */
+function bodyLine(carKey){
+  var b = BODIES[CARS[carKey].body] || BODIES.coupe;
+  return b.len.toFixed(2) + ' x ' + b.wide.toFixed(2) + ' x ' +
+         (b.ride + b.roof).toFixed(2) + ' m';
+}
+
 function drawShowroom(){
   var html = '<p class="note2">' + walletLine() + '</p>';
 
@@ -292,18 +351,22 @@ function drawShowroom(){
     else if(owned) right = '<span class="cost have">Drive</span>';
     else right = '<span class="cost' + (afford ? '' : ' cant') + '">' + money(car.price) + '</span>';
 
-    html += '<div class="row' + (driving ? ' on' : '') +
+    html += '<div class="row car' + (driving ? ' on' : '') +
             (!owned && !afford ? ' locked' : '') + '" data-car="' + key + '">' +
+            shotOf(key) +
             '<div class="grow"><div class="t">' + car.name + '</div>' +
             '<div class="d">' + car.desc + '</div>' +
-            '<div style="margin-top:6px">' +
+            '<div class="chips">' +
             '<span class="chip cls">Class ' + classOf(r) + '</span>' +
             '<span class="chip">' + Math.round(flatOut(s) * MPS_TO_MPH) + ' mph</span>' +
             '<span class="chip">0-60 ' + zeroTo60(s).toFixed(1) + 's</span>' +
+            '<span class="chip">' + Math.round(s.power) + ' kW</span>' +
             '<span class="chip">' + Math.round(s.mass) + ' kg</span>' +
+            '<span class="chip">' + bodyLine(key) + '</span>' +
             '</div></div>' + right + '</div>';
   }
   $('showList').innerHTML = html;
+  fillShots($('showList'));
 
   Array.prototype.forEach.call($('showList').querySelectorAll('.row'), function(row){
     var key = row.getAttribute('data-car');
@@ -455,11 +518,14 @@ function drawPaint(){
   var l = looksFor(carKey);
   var html = '';
 
+  /* The shop's colours plus this car's own on the end, so the colour it
+     arrived in is always one you can go back to. */
+  var pal = swatchesFor(carKey);
   html += '<h2 style="font-size:22px;margin-top:14px">Paint</h2><div class="swatches">';
-  for(var i = 0; i < PAINTS.length; i++){
+  for(var i = 0; i < pal.length; i++){
     html += '<div class="sw' + (l.paint === i ? ' on' : '') + '" data-k="paint" data-i="' + i +
-            '" title="' + PAINTS[i].n + '" style="background:#' +
-            PAINTS[i].c.toString(16).padStart(6, '0') + '"></div>';
+            '" title="' + pal[i].n + '" style="background:#' +
+            pal[i].c.toString(16).padStart(6, '0') + '"></div>';
   }
   html += '</div>';
 

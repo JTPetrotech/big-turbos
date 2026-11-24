@@ -99,6 +99,14 @@ function updateMenu(){
 
 /* ------------------------------------------------------------- the race -- */
 
+/* The little picture of a car in a results row, in the paint it raced in.
+   Filled a frame at a time like the showroom's, because the results sheet
+   appears the instant you cross the line and should not keep you waiting
+   while four cars are photographed. */
+function resShot(car){
+  return wornShot(car.key, car.looks || showLooks(car.key), 'tiny');
+}
+
 function clearCars(){
   for(var i = 0; i < carObjs.length; i++){
     scene.remove(carObjs[i]);
@@ -206,6 +214,9 @@ function startRace(opts){
                               stripe: 0, spoiler: c % 2 === 0, kit: c % KITS.length,
                               size: 0 };
     if(car.isYou) looks.plate = SAVE.plate || '';
+    /* Kept on the car, so the results sheet can show the thing that
+       actually raced rather than a stock one in the wrong colour. */
+    car.looks = looks;
     var obj = buildCar(car.key, looks, car.stats.lift);
     car.obj = obj;
     scene.add(obj);
@@ -572,6 +583,7 @@ function endRace(){
     ? G.event.name + ' at ' + G.track.name + ', ' + G.laps + ' laps.'
     : 'Quick race at ' + G.track.name + '.';
 
+  SHOT_WEAR.length = 0;
   var rows = '';
   for(var i = 0; i < order.length; i++){
     var car = order[i];
@@ -585,10 +597,12 @@ function endRace(){
     rows += '<tr' + (car.isYou ? ' class="you"' : '') + '>' +
             '<td class="p">' + (i + 1) + '</td>' +
             '<td>' + car.name + '</td>' +
-            '<td style="color:var(--muted);font-size:11.5px">' + CARS[car.key].name + '</td>' +
+            '<td class="car">' + resShot(car) +
+            '<span>' + CARS[car.key].name + '</span></td>' +
             '<td class="t">' + t + '</td></tr>';
   }
   $('resTable').innerHTML = rows;
+  fillShots($('resTable'));
 
   /* Prize money is still earned with money switched off - you did win the
      race - but quoting a figure next to a wallet reading "Unlimited" would
@@ -653,6 +667,7 @@ function endDrag(order, pos){
   $('resTitle').textContent = G.foul ? 'Red light' : (pos === 1 ? 'Won it' : 'Lost it');
   $('resSub').innerHTML = 'A quarter mile at ' + G.track.name + '.';
 
+  SHOT_WEAR.length = 0;
   var rows = '';
   for(var i = 0; i < order.length; i++){
     var car = order[i];
@@ -661,10 +676,12 @@ function endDrag(order, pos){
     rows += '<tr' + (car.isYou ? ' class="you"' : '') + '>' +
             '<td class="p">' + (i + 1) + '</td>' +
             '<td>' + car.name + '</td>' +
-            '<td style="color:var(--muted);font-size:11.5px">' + CARS[car.key].name + '</td>' +
+            '<td class="car">' + resShot(car) +
+            '<span>' + CARS[car.key].name + '</span></td>' +
             '<td class="t">' + et + ' &middot; ' + tr + '</td></tr>';
   }
   $('resTable').innerHTML = rows;
+  fillShots($('resTable'));
 
   var note = freeBuild() ? '' : '<b style="color:var(--amber)">+' + money(prize) + '</b>.';
   if(G.react !== null) note += ' Reaction ' + G.react.toFixed(3) + 's.';

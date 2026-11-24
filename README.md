@@ -115,6 +115,23 @@ Sixteen of them, all real cars, and the figures are the real ones: kilowatts, ki
 and a drag area that a two-and-a-half tonne truck really does have. Nothing
 is scaled to feel fair.
 
+Every card in the showroom carries a picture of the car it is selling, and the
+picture is a photograph rather than an icon: the same `buildCar` the race uses,
+the same body, the same paint and wheels you fitted, shot three-quarters on
+with a long lens from eight metres away. There is no second drawing of a car
+anywhere that could drift out of step with the first — the same reason the
+garage reads its figures out of `carStats` instead of a typed table. Every car
+is shot from the same spot rather than zoomed to fill its card, so the pickup
+takes up most of the width of its picture and the hatchback about three fifths
+of it, which is how they compare in a car park. The results sheet after a race
+shows the same pictures, each car in the paint it actually raced in.
+
+They cost about three milliseconds each, which is cheap enough not to need
+caching, and they are filled in one per frame so that opening the showroom
+never stalls. Deliberately not `toDataURL`: encoding a PNG nothing will ever
+save was forty-three of the original sixty milliseconds, and copying the
+pixels into a canvas on the card takes one.
+
 | | kW | kg | 0-60 | 1/4 mile |
 |---|---|---|---|---|
 | Honda Civic Si | 92 | 1,046 | 8.8s | 16.65s @ 78 mph |
@@ -304,6 +321,16 @@ open a `file://` page. The game itself still opens straight from disk.
 and left alone after that. Credits, cars, parts, paint, career progress, best
 laps per track and your best quarter mile per car. Nothing leaves the
 device.
+
+A save keeps a paint as a number, so the list it counts along has to be the
+same list every time the game starts. It was not: a car's own colour used to
+be appended to the paint shop the first time that car was asked about, which
+depended on which cars you had looked at, so a number written down in one
+session pointed at a different colour — or off the end of the list, and so at
+Signal red — in the next. The shop is now the sixteen colours it is written
+down as and nothing else, and a car's own colour is slot sixteen of its own
+picker, built fresh each time it is drawn. There is a test that the shop never
+grows and that no car ever saves a number past the end of it.
 
 ## Money
 

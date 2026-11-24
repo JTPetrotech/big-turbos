@@ -12,6 +12,7 @@ const ctx = H.makeContext({ MPS_TO_MPH: 2.23694 });
 H.run(ctx, H.grab(core, ['clamp', 'lerp', 'sign']));
 H.run(ctx, 'var SAVE = {parts:{}, looks:{}, owned:["hatch"], credits:0, done:{}, champ:{}};');
 H.run(ctx, H.grabVar(trk, ['TRACKS']));
+H.run(ctx, H.grabVar(H.read('30-cars.js'), ['BODIES']));
 H.run(ctx, 'function saveNow(){}');
 H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'CHAMPIONSHIPS', 'CHAMP_POINTS', 'KITS', 'WHEEL_SIZES', 'PAINTS', 'WHEELS', 'STRIPES', 'EVENTS', 'CLASSES']));
 H.run(ctx, 'var GRAV = 9.81, RHO = 1.225, POWER_USE = 0.55, TRACTION = 0.85;');
@@ -25,13 +26,19 @@ H.run(ctx, H.grab(gar, [
   'freeBuild', 'listPrice', 'ownsCar', 'ownsPart', 'buyPart', 'fitPart', 'buyCar',
   'newKit', 'benchStep', 'allKits', 'kitAt', 'isCustomKit', 'saveKit', 'deleteKit',
   'gripCeiling', 'dialByKey', 'neutralTune', 'tuneFor', 'setTune', 'resetTune',
-  'isTuned', 'applyTune', 'dynoPull', 'dynoPeak', 'logDyno'
+  'isTuned', 'applyTune', 'dynoPull', 'dynoPeak', 'logDyno',
+  'looksFor', 'swatchesFor', 'defaultPaint', 'paintColour'
 ]));
 H.run(ctx, H.grabVar(gar, ['BENCH_PARTS', 'TUNE_DIALS']));
 /* grabVar lifts tables, not plain numbers, so this one is read out of the
    source rather than typed here as well. Change it in the game and the test
    follows; type it twice and it rots. */
 H.run(ctx, 'var MAX_KITS = ' + Number(/var MAX_KITS\s*=\s*(\d+)/.exec(gar)[1]) + ';');
+
+/* How many colours the paint shop holds as written down in the source. The
+   whole of the colour test below hangs on this being read before anything
+   has had the chance to change it. */
+const PAINTS_AT_LOAD = ctx.PAINTS.length;
 
 const { carStats, topSpeed, zeroTo60, rating, classOf, gripAt, summary } = ctx;
 const MPH = 2.23694;
@@ -749,5 +756,81 @@ H.ok(worstGap < 1, 'every car reaches the top speed the garage prints for it',
      'worst miss ' + worstGap.toFixed(2) + ' mph, on the ' + worstCar);
 H.ok(flatOut(carStats('coupe', {})) <= ctx.topSpeed(carStats('coupe', {})) + 1e-9,
      'and it is never more than the gearing could ever allow');
+
+/* ------------------------------------------- the picture on the card -- */
+
+console.log('\n  the picture on the card');
+
+/* Every car in the showroom is photographed with buildCar, which looks its
+   shape up in BODIES by the `body` name on the car. A car naming a body
+   that is not there would fall back to the coupe and be sold to you as a
+   picture of something else, so the two tables have to agree. */
+let bodyless = [];
+for(const key of ctx.CAR_ORDER){
+  if(!ctx.BODIES[ctx.CARS[key].body]) bodyless.push(ctx.CARS[key].name);
+}
+H.ok(bodyless.length === 0, 'every car has a body to be drawn from',
+     bodyless.join(', ') + ' name a body that does not exist');
+
+/* And the shape it is drawn from is the shape the card quotes. The chip
+   reads length x width x height, and height is the floor of the bodywork
+   plus the roof above it - not `roof` on its own, which is what it used to
+   be mistaken for. */
+let impossible = [];
+for(const key of ctx.CAR_ORDER){
+  const b = ctx.BODIES[ctx.CARS[key].body];
+  const tall = b.ride + b.roof;
+  if(!(b.len > 3 && b.len < 7)) impossible.push(ctx.CARS[key].name + ' is ' + b.len + ' m long');
+  if(!(b.wide > 1.5 && b.wide < 2.4)) impossible.push(ctx.CARS[key].name + ' is ' + b.wide + ' m wide');
+  if(!(tall > 1 && tall < 2.2)) impossible.push(ctx.CARS[key].name + ' is ' + tall.toFixed(2) + ' m tall');
+  if(!(b.hood < b.roof)) impossible.push(ctx.CARS[key].name + ' has a waist above its roof');
+}
+H.ok(impossible.length === 0, 'and every one of them is the size of a real car',
+     impossible.join('; '));
+
+/* ------------------------------------------------- the colour it keeps -- */
+
+console.log('\n  the colour a car keeps');
+
+/* A car's own colour sits one past the end of the paint shop's sixteen, and
+   that slot has to mean the same thing every time the game starts. It used
+   to be an entry pushed onto PAINTS the first time a car was asked about,
+   so the number written into the save pointed at a different colour - or at
+   nothing - the next time round, and every car you had driven came back in
+   Signal red. */
+let wrongColour = [];
+for(const key of ctx.CAR_ORDER){
+  const slot = ctx.defaultPaint(key);
+  const got = ctx.swatchesFor(key)[slot].c;
+  if(got !== ctx.CARS[key].colour){
+    wrongColour.push(ctx.CARS[key].name + ' wanted ' + ctx.CARS[key].colour.toString(16) +
+                     ', slot ' + slot + ' holds ' + got.toString(16));
+  }
+}
+H.ok(wrongColour.length === 0, 'every car arrives in its own colour',
+     wrongColour.join('; '));
+
+/* And the shop has to be exactly the size it is written down as, however
+   many cars have been asked about. The save keeps a number, not a colour,
+   and the only reason a number survives a restart is that the list it
+   counts along is rebuilt identical every time. */
+for(const key of ctx.CAR_ORDER){ ctx.defaultPaint(key); ctx.swatchesFor(key); ctx.looksFor(key); }
+H.ok(ctx.PAINTS.length === PAINTS_AT_LOAD,
+     'and asking about one does not change the paint shop',
+     'the shop went from ' + PAINTS_AT_LOAD + ' colours to ' + ctx.PAINTS.length +
+     ', so every number written into a save before now points somewhere else');
+
+/* Which is the same thing said from the save's side: whatever number a car
+   writes down, it must still be inside a shop of the size it was built
+   with - the size the next run of the game will rebuild. */
+let outOfRange = [];
+for(const key of ctx.CAR_ORDER){
+  const saved = ctx.looksFor(key).paint;
+  if(saved > PAINTS_AT_LOAD){
+    outOfRange.push(ctx.CARS[key].name + ' saves paint ' + saved);
+  }
+}
+H.ok(outOfRange.length === 0, 'so a saved colour still means that colour next time',
+     outOfRange.join('; ') + ', past the end of a shop ' + PAINTS_AT_LOAD + ' long');
 
 H.done();
