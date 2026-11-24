@@ -20,12 +20,14 @@ H.run(ctx, H.grab(gar, [
   'champById', 'champState', 'champOpen', 'champRound', 'awardChampPoints', 'champStandings',
   'slotByKey', 'partsFor', 'tierOf', 'carStats', 'statsOf', 'rollingForce',
   'driveForce', 'tractionLimit', 'dragForce', 'dragLimited', 'topSpeed',
-  'forceAt', 'zeroTo60', 'gripAt', 'rating', 'classOf', 'summary',
+  'forceAt', 'flatOut', 'zeroTo60', 'gripAt', 'rating', 'classOf', 'summary',
   'partCost', 'eventOpen',
   'freeBuild', 'listPrice', 'ownsCar', 'ownsPart', 'buyPart', 'fitPart', 'buyCar',
-  'newKit', 'benchStep', 'allKits', 'kitAt', 'isCustomKit', 'saveKit', 'deleteKit'
+  'newKit', 'benchStep', 'allKits', 'kitAt', 'isCustomKit', 'saveKit', 'deleteKit',
+  'gripCeiling', 'dialByKey', 'neutralTune', 'tuneFor', 'setTune', 'resetTune',
+  'isTuned', 'applyTune', 'dynoPull', 'dynoPeak', 'logDyno'
 ]));
-H.run(ctx, H.grabVar(gar, ['BENCH_PARTS']));
+H.run(ctx, H.grabVar(gar, ['BENCH_PARTS', 'TUNE_DIALS']));
 /* grabVar lifts tables, not plain numbers, so this one is read out of the
    source rather than typed here as well. Change it in the game and the test
    follows; type it twice and it rots. */
@@ -586,5 +588,166 @@ console.log('\n  the championships');
   ctx.SAVE.parts = {};
   ctx.SAVE.credits = 0;
 }
+
+
+/* ------------------------------------------------------- the Speed Demon -- */
+
+console.log('\n  the dials');
+
+const { neutralTune, tuneFor, setTune, resetTune, isTuned, flatOut,
+        dynoPull, dynoPeak, logDyno, gripCeiling, dragForce, rollingForce,
+        forceAt, driveForce } = ctx;
+
+/* Which way is up for each stat a dial can touch. A step that moves nothing
+   on this list the wrong way is a free lunch, and this garage does not do
+   free lunches. */
+const BETTER = { grip: 1, force: 1, top: 1, boost: 1, down: 1, cda: -1, lag: -1 };
+
+ctx.SAVE.tune = {};
+const untouched = tuneFor('coupe');
+H.ok(!isTuned(untouched), 'a car nobody has touched has every dial on its middle notch',
+     JSON.stringify(untouched));
+
+/* The neutral tune has to be indistinguishable from no tune at all, or the
+   whole garage shifts underneath every car the day this screen is added. */
+let drift = 0;
+for(const key of ctx.CAR_ORDER){
+  const bare = carStats(key, {});
+  const mid = carStats(key, {}, neutralTune());
+  for(const stat in bare) if(Math.abs(bare[stat] - mid[stat]) > 1e-9) drift++;
+}
+H.ok(drift === 0, 'and the middle notch changes nothing at all about any car',
+     drift + ' stats moved');
+
+/* Pick a car that has something to turn up, so the boost dial is live. */
+const turboCar = ctx.CAR_ORDER.find(k => carStats(k, {}).boost > 0);
+H.ok(!!turboCar, 'and there is a turbocharged car to test the boost dial on',
+     turboCar && ctx.CARS[turboCar].name);
+
+let freeLunch = 0, pureLoss = 0;
+for(const dial of ctx.TUNE_DIALS){
+  const base = carStats(turboCar, {}, neutralTune());
+  for(let st = 0; st < dial.steps.length; st++){
+    if(st === dial.mid) continue;
+    const t = neutralTune();
+    t[dial.key] = st;
+    const s = carStats(turboCar, {}, t);
+    let gained = false, given = false;
+    for(const stat in BETTER){
+      const moved = (s[stat] - base[stat]) * BETTER[stat];
+      if(moved > 1e-9) gained = true;
+      if(moved < -1e-9) given = true;
+    }
+    if(!given) freeLunch++;
+    if(!gained) pureLoss++;
+  }
+}
+H.ok(freeLunch === 0, 'no step on any dial is a free lunch',
+     freeLunch + ' gave something for nothing');
+H.ok(pureLoss === 0, 'and none of them is a pure downgrade either',
+     pureLoss + ' took without giving');
+
+/* A dial that pretends to do something it cannot is worse than no dial. */
+const na = ctx.CAR_ORDER.find(k => !(carStats(k, {}).boost > 0));
+const naUp = neutralTune(); naUp.boost = 3;
+H.ok(carStats(na, {}, naUp).boost === 0,
+     'turning up the boost on a car with no turbo conjures none out of nothing',
+     ctx.CARS[na].name);
+const turboUp = neutralTune(); turboUp.boost = 3;
+H.ok(carStats(turboCar, {}, turboUp).boost > carStats(turboCar, {}, neutralTune()).boost,
+     'but on one that has a turbo it really does turn it up');
+
+/* The one that started all this: gearing used to be invisible to the rating
+   in the direction that mattered. */
+const shortT = neutralTune(); shortT.gear = ctx.TUNE_DIALS[0].steps.length - 1;
+const shortS = carStats(turboCar, {}, shortT), midS = carStats(turboCar, {}, neutralTune());
+H.ok(ctx.zeroTo60(shortS) < ctx.zeroTo60(midS), 'short gears buy acceleration',
+     ctx.zeroTo60(midS).toFixed(2) + 's -> ' + ctx.zeroTo60(shortS).toFixed(2) + 's');
+H.ok(flatOut(shortS) < flatOut(midS), 'and pay for it in top speed',
+     Math.round(flatOut(midS) * MPH) + ' -> ' + Math.round(flatOut(shortS) * MPH) + ' mph');
+H.ok(rating(shortS) > rating(midS),
+     'and the rating goes up, so you cannot gear your way into a slower class',
+     rating(midS) + ' -> ' + rating(shortS));
+
+/* The dials are per car and they survive being written down. */
+setTune('coupe', 'gear', 4);
+H.ok(tuneFor('coupe').gear === 4 && tuneFor('a90').gear === 2,
+     'a dial turned on one car stays on that car');
+H.ok(isTuned(tuneFor('coupe')), 'and the car is marked as having been got at');
+resetTune('coupe');
+H.ok(!isTuned(tuneFor('coupe')), 'and putting the dials back really puts them back');
+
+/* ------------------------------------------------------------- the dyno -- */
+
+console.log('\n  the rolling road');
+
+const demo = carStats(turboCar, { turbo: 2, tyres: 1 });
+const peak = dynoPeak(demo);
+
+let highest = 0, hardest = 0;
+for(const p of peak.pull){ highest = Math.max(highest, p.kw); hardest = Math.max(hardest, p.push); }
+H.near(peak.kw, highest, 1e-9, 'the peak is read off the samples the graph is drawn from');
+H.near(peak.push, hardest, 1e-9, 'and so is the hardest it pulls');
+
+/* The graph says "this is as fast as it goes" by drawing a line where the
+   red curve meets the blue one. That claim is only worth making if the two
+   are the same number. */
+let crossed = null;
+for(const p of peak.pull) if(p.push <= p.hold){ crossed = p.mph; break; }
+H.ok(crossed !== null, 'the two lines do cross somewhere on the graph');
+H.near(crossed, peak.topMph, 2.5,
+       'and they cross at the top speed printed beside it');
+
+/* Amber on the graph means the tyres are the limit. It had better mean it. */
+let amberWrong = 0;
+for(const p of peak.pull){
+  const limited = p.push >= gripCeiling(demo, p.v) - 0.5;
+  if(limited !== p.slip) amberWrong++;
+}
+H.ok(amberWrong === 0, 'every amber stretch really is where the tyres are the limit',
+     amberWrong + ' samples disagreed');
+
+const small = dynoPeak(carStats(turboCar, { turbo: 1 }));
+const big = dynoPeak(carStats(turboCar, { turbo: 5 }));
+H.ok(big.kw > small.kw, 'a bigger turbo shows up on the rollers as more power',
+     Math.round(small.kw) + ' -> ' + Math.round(big.kw) + ' kW');
+H.ok(big.boostBy > small.boostBy, 'and as boost that arrives later',
+     Math.round(small.boostBy) + ' -> ' + Math.round(big.boostBy) + ' mph');
+
+ctx.SAVE.dyno = {};
+H.ok(logDyno('coupe', big) === true, 'the first pull of the day is a record');
+H.ok(logDyno('coupe', small) === false, 'a worse one after it is not');
+H.near(ctx.SAVE.dyno.coupe.kw, big.kw, 1e-9,
+       'and the best pull is the one that is kept');
+
+/* --------------------------------------------- the top speed it quotes -- */
+
+console.log('\n  the top speed on the card');
+
+/* Walked out with the same forces the race loop uses, at a step fine enough
+   that the answer is the car's and not the integrator's. If the garage says
+   180 mph, the straight had better eventually show 180 mph. */
+function settlesAt(s){
+  const vMax = ctx.topSpeed(s);
+  let v = 0;
+  for(let i = 0; i < 300000; i++){
+    const a = (forceAt(s, v, vMax) - dragForce(s, v) - rollingForce(s)) / s.mass;
+    if(a < 1e-5) break;
+    v += a * 0.002;
+  }
+  return v;
+}
+let worstGap = 0, worstCar = '';
+for(const key of ctx.CAR_ORDER){
+  for(const gears of [0, 1, 2, 3]){
+    const s = carStats(key, { gears });
+    const gap = Math.abs(flatOut(s) - settlesAt(s)) * MPH;
+    if(gap > worstGap){ worstGap = gap; worstCar = ctx.CARS[key].name + ' / gears ' + gears; }
+  }
+}
+H.ok(worstGap < 1, 'every car reaches the top speed the garage prints for it',
+     'worst miss ' + worstGap.toFixed(2) + ' mph, on the ' + worstCar);
+H.ok(flatOut(carStats('coupe', {})) <= ctx.topSpeed(carStats('coupe', {})) + 1e-9,
+     'and it is never more than the gearing could ever allow');
 
 H.done();

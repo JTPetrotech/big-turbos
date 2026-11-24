@@ -182,7 +182,8 @@ function startRace(opts){
   buildTrackMesh(G.track);
   if(showcase){ scene.remove(showcase); disposeTree(showcase); showcase = null; }
 
-  var you = makeCar(SAVE.car, partsFor(SAVE.car), { name: 'You', seed: 1 });
+  var you = makeCar(SAVE.car, partsFor(SAVE.car),
+                    { name: 'You', seed: 1, tune: tuneFor(SAVE.car) });
   you.isYou = true;
   G.cars = [you];
   G.you = you;
@@ -391,7 +392,9 @@ function showcaseStep(dt){
 
 function drawHUD(){
   var you = G.you;
-  if(!you) return;
+  /* Both, and for the same reason drawMap checks: leaving a race nulls the
+     track, and a frame drawn in between would read the best lap off it. */
+  if(!you || !G.track) return;
 
   var mph = Math.abs(you.vf) * MPS_TO_MPH;
   $('spd').textContent = Math.round(mph);
@@ -740,6 +743,20 @@ function wire(){
     backToMenu();
   };
   $('btnHelp').onclick = function(){ hideAll(); show('ovHelp'); drawHelp(); };
+
+  /* Speed Demon. The strip button leaves by the same door the menu does,
+     so a car goes from the rollers to a measured quarter in one press. */
+  $('btnDemon').onclick = openDemon;
+  $('btnDemonBack').onclick = closeDemon;
+  $('btnDynoRun').onclick = dynoRun;
+  $('btnDemonBench').onclick = openBench;
+  $('btnDemonGarage').onclick = openGarage;
+  $('btnDemonStrip').onclick = function(){ demonSweep = null; startDrag(); };
+  $('btnDemonReset').onclick = function(){
+    resetTune(SAVE.car);
+    drawDemon();
+    dynoRun();
+  };
 
   $('btnGarageBack').onclick = backToMenu;
   $('btnShowBack').onclick = backToMenu;

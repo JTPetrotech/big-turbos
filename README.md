@@ -48,6 +48,49 @@ The preview in the garage is produced by the same `carStats()` call the
 physics uses — not a second table someone typed the numbers into twice. If
 it says a part adds 12 kW, the car gets 12 kW.
 
+## Speed Demon
+
+The workshop, off the main menu: a rolling road, three dials and the
+Workbench. None of it costs anything, because none of it is a part — a dial
+is your own evening with a spanner.
+
+**The rolling road** draws how hard the wheels can push against how fast the
+car is going. Red is the engine doing the pushing, amber is where it has more
+to give and the tyres will not take it, and blue is the air and the road
+pushing back. The shaded gap between the two is the only thing that
+accelerates the car, and where it closes is as fast as it will ever go.
+
+It is thrust on the vertical axis rather than horsepower against rpm, for an
+honest reason. There are no gear ratios in this model to put rpm on an axis
+with, and the engine holds the same power at any road speed once it is
+spinning, so a power line would be a flat line that told you nothing. Thrust
+is that same power divided by speed, and the shape of it is the shape of the
+car: a flat ceiling where the tyres cannot take any more, a long fall where
+they can, and a cliff at the rev limiter.
+
+**The dials** are finer than anything in the parts list, and each one gives
+with one hand and takes with the other:
+
+| | Buys | Costs |
+|---|---|---|
+| Final drive | Thrust everywhere | Top speed |
+| Boost pressure | More of it | It arrives later |
+| Rake | Downforce | Drag |
+
+Turning one redraws the graph with the untouched car behind it as a dashed
+line, so the trade is something you can see rather than something you are
+told. They go through `carStats` like everything else, which means the dyno,
+the garage, the class rating and the car that turns up on the grid are all
+reading one build. A tune that made you quicker without moving your rating
+would be a way of sneaking an S-class car into a club race, so it moves your
+rating — and closing that hole turned up an older one, where fitting short
+ratios made a car quicker everywhere and *lowered* its rating, because the
+only gearing the rating could see was the top speed it gave away.
+
+A test fits every step of every dial and insists each one is both better at
+something and worse at something. The first draft of the rake dial failed it:
+sitting the car level took drag away and cost nothing.
+
 ## The Workbench
 
 Four body kits come off the shelf. The Workbench is where you make your own:
@@ -111,6 +154,9 @@ standings table that is about people you recognise by round three.
 and the 1.3 km field around it is the point. It is also the only place a lift
 kit earns its money.
 
+**Speed Demon** is not a race at all. It is the workshop - the rolling
+road, the dials and the Workbench - and it has its own section above.
+
 ## Driving
 
 Velocity is split into forward and sideways components in the car's own
@@ -122,7 +168,7 @@ difference, and when they cannot fight it any more you are sliding. There is
 no separate "drift mode" — it falls out of the same two lines.
 
 Units are real: metres, seconds, kilograms, newtons. The stock hatch does
-0–60 in 9.3s and tops out at 102 mph, because 85 kW pushing 1,010 kg is what
+0–60 in 9.3s and tops out at 95 mph, because 85 kW pushing 1,010 kg is what
 that does.
 
 ## Controls
@@ -197,6 +243,21 @@ It also checks the two new modes: that a quarter mile flat out holds its lane
 to within a millimetre, that the ETs stay in the range the real cars run,
 that free roam really has no barrier but still has an edge of the world, and
 that a lift kit grips in a field where the same truck stock slides.
+
+It checks which way is right. The steering was inverted for a long time and
+no test here noticed, because the car, the track and the AI all agreed with
+one another - what they disagreed with was the camera, and nothing had ever
+asked the camera anything. So the test works out the camera own idea of
+"right" the way three.js does, from the chase camera eye and target, and
+insists the car goes that way when the right key is held.
+
+And it checks that the top speed the garage prints is the one the car
+reaches. Every car and every gearbox is walked out to terminal velocity
+with the forces the race loop uses, and the printed figure has to be within
+a mile an hour of where it settles. It used to be about eight mph out on
+every car in the game: the number on the card was the ceiling the gearing
+sets, and the rev limiter fades the last few m/s out from under the car
+before it ever gets there.
 
 And it reads this README back. Every figure in the car table above - power,
 weight, 0-60 and the quarter mile - is measured again from the model and

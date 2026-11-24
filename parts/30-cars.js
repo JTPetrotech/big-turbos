@@ -336,5 +336,8 @@ function animateCar(obj, speed, steer, dt){
   if(!u || !u.wheels) return;
   var spin = (speed * dt) / 0.33;
   for(var i = 0; i < u.wheels.length; i++) u.wheels[i].rotation.x -= spin;
-  for(var j = 0; j < u.steered.length; j++) u.steered[j].rotation.y = steer * 0.44;
+  /* Negated, because rotation.y turns a wheel to its left and the steer this
+     is handed is positive for right. The front wheels used to point the way
+     the car was not going, which is a quiet confirmation of the same slip. */
+  for(var j = 0; j < u.steered.length; j++) u.steered[j].rotation.y = -steer * 0.44;
 }

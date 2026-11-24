@@ -179,6 +179,18 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 .stat .v em{font-style:normal;font-size:11px;font-family:var(--body);font-weight:800}
 .stat .v em.up{color:var(--green)} .stat .v em.dn{color:var(--red)}
 
+/* the dyno */
+#dynoWrap{margin-top:14px;border:1px solid var(--line);border-radius:12px;
+  background:#0a0c11;padding:9px 10px 2px}
+#dynoChart{width:100%;display:block}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));
+  gap:8px;margin-top:12px}
+.fig{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.fig .n{color:var(--muted);text-transform:uppercase;letter-spacing:.1em;
+  font-weight:800;font-size:9.5px}
+.fig .v{font-family:var(--display);font-size:23px;line-height:1.1;margin-top:2px}
+.fig .v small{font-family:var(--body);font-size:10.5px;font-weight:800;color:var(--muted)}
+
 /* generic list rows */
 .row{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:12px;
   background:var(--panel);border:1px solid var(--line);margin-top:8px;cursor:pointer;
@@ -266,6 +278,9 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
       <button class="go alt" id="btnDrag">Drag strip</button>
       <button class="go alt" id="btnRoam">Free roam</button>
     </div>
+    <div class="btns">
+      <button class="go alt" id="btnDemon">Speed Demon</button>
+    </div>
     <div class="nav">
       <button class="mini" id="btnGarage">Garage</button>
       <button class="mini" id="btnShowroom">Showroom</button>
@@ -325,6 +340,39 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <div class="btns">
       <button class="go" id="btnBenchSave">Save it to the garage</button>
       <button class="go alt" id="btnBenchBack">Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- speed demon: the rolling road, the dials and the bench, all in one room -->
+<div class="ov" id="ovDemon">
+  <div class="card wide">
+    <h2>Speed Demon</h2>
+    <p class="sub">The workshop. Put it on the rollers, see where the power
+      actually is, then turn the dials until it is somewhere you want it.
+      None of it costs anything &mdash; a dial is your own evening with a
+      spanner, not a part.</p>
+    <div id="dynoWrap"><canvas id="dynoChart" height="300"></canvas></div>
+    <p class="note2" style="margin-top:6px">How hard the wheels push, against
+      how fast it is going. <b style="color:var(--red)">Red</b> is the engine
+      doing the pushing; <b style="color:var(--amber)">amber</b> is where it
+      has more to give and the tyres will not take it.
+      <b style="color:var(--blue)">Blue</b> is the air and the road pushing
+      back. The shaded gap between them is the only thing that accelerates
+      the car, and where it closes is as fast as it will ever go. A dashed
+      grey line, when there is one, is the same car with the dials put back.</p>
+    <div class="figs" id="demonFigs"></div>
+    <div id="demonDials"></div>
+    <p class="note2" id="demonNote"></p>
+    <div class="btns">
+      <button class="go" id="btnDynoRun">Another pull</button>
+      <button class="go alt" id="btnDemonBench">The Workbench</button>
+    </div>
+    <div class="nav">
+      <button class="mini" id="btnDemonStrip">Take it down the strip</button>
+      <button class="mini" id="btnDemonGarage">Garage</button>
+      <button class="mini" id="btnDemonReset">Put the dials back</button>
+      <button class="mini" id="btnDemonBack">Back</button>
     </div>
   </div>
 </div>

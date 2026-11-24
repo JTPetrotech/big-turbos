@@ -188,6 +188,8 @@ function freshSave(){
     bestEt: {},                // car key -> best quarter mile
     plate: '',                 // what it says on the numberplate
     kits: [],                  // body kits built in the Workbench
+    tune: {},                  // carKey -> Speed Demon dial positions
+    dyno: {},                  // carKey -> the best pull it has put down
     freeBuild: true,           // unlimited money: parts and cars cost nothing
     seen: false
   };

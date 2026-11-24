@@ -18,11 +18,12 @@ function build(){
   H.run(ctx, 'var G = {t:0};');
   H.run(ctx, H.grabVar(track, ['TRACKS']));
   H.run(ctx, H.grab(track, ['catmull', 'resample', 'stripPoints', 'buildTrack', 'nearest', 'finishNearest']));
-  H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'CLASSES', 'EVENTS']));
+  H.run(ctx, H.grabVar(gar, ['CARS', 'CAR_ORDER', 'SLOTS', 'TRUCK_BODIES', 'CLASSES', 'EVENTS', 'TUNE_DIALS']));
   H.run(ctx, H.grab(gar, [
     'isTruck', 'slotFits', 'slotsFor',
     'slotByKey', 'carStats', 'rollingForce', 'driveForce', 'tractionLimit',
-    'dragForce', 'dragLimited', 'topSpeed', 'forceAt', 'zeroTo60', 'gripAt',
+    'dragForce', 'dragLimited', 'topSpeed', 'forceAt', 'flatOut', 'zeroTo60', 'gripAt',
+    'gripCeiling', 'applyTune', 'neutralTune',
     'rating', 'classOf'
   ]));
   H.run(ctx, 'var CAR_RADIUS = 1.5, OFF_GRIP = 0.55, OFF_DRAG = 5.2, WORLD_EDGE = 660, DRAG_LEN = 402.336;');
@@ -406,7 +407,7 @@ H.ok(back === 0, 'race position never jumps backwards', back + ' jumps');
   says('and does the 0-60 it is credited with',
        /stock hatch does 0.60 in ([\d.]+)s/, ctx.zeroTo60(shopper), 0.06);
   says('and tops out where it says',
-       /tops out at ([\d,]+) mph/, ctx.topSpeed(shopper) * 2.23694, 1);
+       /tops out at ([\d,]+) mph/, ctx.flatOut(shopper) * 2.23694, 1);
 
   /* The parts table describes the top tier of each part - the expensive one
      that buys a trade. Those percentages are read straight out of SLOTS. */
@@ -622,5 +623,112 @@ H.ok(big.cars.every(c => c.finished), 'all five cars finish a two-lap race',
 const gap = big.order[big.order.length - 1].finishTime - big.order[0].finishTime;
 H.ok(gap > 0.5 && gap < 120, 'the field spreads out but does not fall apart',
      'first to last ' + gap.toFixed(1) + 's');
+
+/* ------------------------------------------------------ which way is right -- */
+/* The steering being inverted was invisible to every other test in this file,
+   because the car, the track and the AI all agreed with one another. What they
+   disagreed with was the camera, and no headless test had ever asked the
+   camera anything. So this works out the camera's own idea of "right" the way
+   three.js does, and insists the car goes that way when the right key is held.
+
+   placeCamera puts the eye behind the car and the target up the road ahead of
+   it, so the direction the camera looks is the car's own heading,
+   f = (sin yaw, 0, cos yaw). three.js builds a camera's right as f x up with
+   up = (0, 1, 0), which on a flat world comes out as (-cos yaw, 0, sin yaw).
+   That one vector is the whole test. Roam is used because it has no barrier
+   to swerve into and spoil the measurement. */
+
+console.log('\n  which way is right');
+
+const open = ctx.buildTrack('roam');
+
+const swerve = (steer, stability) => {
+  const c = ctx.makeCar('coupe', {});
+  ctx.stageDrag([c], open);
+  if(stability !== undefined) c.stats.stability = stability;
+  const straight = { throttle: 1, brake: 0, steer: 0, hand: false };
+  /* Rolling first: lock deliberately does nothing at a standstill. */
+  for(let t = 0; t < 2; t += DT) ctx.stepCar(c, open, straight, DT);
+
+  const yaw = c.yaw, x0 = c.x, z0 = c.z;
+  const camRightX = -Math.cos(yaw), camRightZ = Math.sin(yaw);
+
+  const held = { throttle: 1, brake: 0, steer: steer, hand: stability !== undefined };
+  let slid = 0;
+  for(let t = 0; t < 1; t += DT){
+    ctx.stepCar(c, open, held, DT);
+    slid = Math.max(slid, Math.abs(c.vl));
+  }
+  return {
+    metres: (c.x - x0) * camRightX + (c.z - z0) * camRightZ,
+    yawed: ctx.angDiff(yaw, c.yaw),
+    slid: slid
+  };
+};
+
+const goneRight = swerve(1), goneLeft = swerve(-1);
+H.ok(goneRight.metres > 1.5, 'holding right moves the car to the right of the screen',
+     goneRight.metres.toFixed(2) + ' m that way');
+H.ok(goneLeft.metres < -1.5, 'and holding left moves it to the left',
+     goneLeft.metres.toFixed(2) + ' m');
+H.ok(Math.abs(goneRight.metres + goneLeft.metres) < 0.3,
+     'and the two are mirror images of each other',
+     Math.abs(goneRight.metres + goneLeft.metres).toFixed(3) + ' m apart');
+
+/* The front wheels are drawn from the same number the physics is handed, so
+   they had better not argue with it. animateCar is three.js code and will not
+   run in here, but the sign it applies can be read out of the source. */
+const cars30 = H.read('30-cars.js');
+H.ok(/rotation\.y = -steer/.test(cars30),
+     'and the front wheels are turned the way the car is going');
+
+/* The slide term is meant to make a stripped-out car rotate FURTHER once it
+   is already sliding - that is the one place the weight tiers' downside is
+   felt. It had the same sign error as the steering, which made it a stability
+   aid on exactly the cars it was written to unsettle. Both cars here are the
+   same car with the same throttle, and only `stability` differs, so nothing
+   else can account for the difference. */
+const settled = swerve(1, 1.00);
+const edgy = swerve(1, 0.82);
+H.ok(settled.slid > 0.9 && edgy.slid > 0.9, 'both cars really are sliding',
+     'up to ' + edgy.slid.toFixed(2) + ' m/s sideways');
+H.ok(settled.yawed < 0 && edgy.yawed < 0,
+     'a car on right lock rotates to the right, sliding or not');
+H.ok(Math.abs(edgy.yawed) > Math.abs(settled.yawed),
+     'and a stripped shell carries on round further than a standard car',
+     settled.yawed.toFixed(3) + ' rad -> ' + edgy.yawed.toFixed(3));
+
+
+/* ------------------------------------------------- the dials reach the car -- */
+/* A dial you can watch move on the rollers and cannot feel on the road is a
+   decoration. makeCar is the one place the garage hands a build to the
+   driving model, so that is where this gets checked - down a measured
+   quarter mile, with nothing but the dial different. */
+
+console.log('\n  the dials reach the car');
+
+const tuneStrip = ctx.buildTrack('strip');
+const downTheStrip = (tune) => {
+  const c = ctx.makeCar('a90', {}, { tune: tune });
+  ctx.stageDrag([c], tuneStrip);
+  let t = 0;
+  while(c.along < 402.336 && t < 60){
+    ctx.stepCar(c, tuneStrip, { throttle: 1, brake: 0, steer: 0, hand: false }, DT);
+    t += DT;
+  }
+  return t;
+};
+
+const asBuilt = downTheStrip(undefined);
+const asNeutral = downTheStrip(ctx.neutralTune());
+H.near(asNeutral, asBuilt, 1e-9,
+       'a car with every dial on its middle notch runs exactly as it did untouched');
+
+const shortGears = ctx.neutralTune(); shortGears.gear = 4;
+const longGears = ctx.neutralTune(); longGears.gear = 0;
+H.ok(downTheStrip(shortGears) < asBuilt, 'short gears really do get there sooner',
+     asBuilt.toFixed(2) + 's -> ' + downTheStrip(shortGears).toFixed(2) + 's');
+H.ok(downTheStrip(longGears) > asBuilt, 'and long gears really do take longer',
+     asBuilt.toFixed(2) + 's -> ' + downTheStrip(longGears).toFixed(2) + 's');
 
 H.done();

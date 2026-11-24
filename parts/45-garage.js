@@ -332,7 +332,7 @@ function tierOf(carKey, slotKey){
    car and its fitted parts it is a pure function - no globals, no state -
    which is what makes it testable and what makes the garage preview honest:
    the numbers shown before you buy are produced by this same call. */
-function carStats(carKey, parts){
+function carStats(carKey, parts, tune){
   var base = CARS[carKey];
   if(!base) throw new Error('no car called ' + carKey);
   parts = parts || {};
@@ -384,6 +384,10 @@ function carStats(carKey, parts){
   }
   s.offroad = clamp(s.offroad, 0, 1);
 
+  /* The Speed Demon dials go on after the parts, because a dial adjusts
+     what is fitted rather than standing in for it. */
+  applyTune(s, tune);
+
   /* A locked differential drags the car straight: it is why a spool puts
      power down and why it will not turn. Both halves come off the one
      number, so you cannot have the first without the second. */
@@ -395,7 +399,7 @@ function carStats(carKey, parts){
   return s;
 }
 
-function statsOf(carKey){ return carStats(carKey, partsFor(carKey)); }
+function statsOf(carKey){ return carStats(carKey, partsFor(carKey), tuneFor(carKey)); }
 
 /* ------------------------------------------------------------- derived -- */
 
@@ -427,14 +431,20 @@ function driveForce(s, v){
   /* Below walking pace, power/v runs away to infinity. Clamp to the traction
      limit, which is what actually stops a real car from launching harder. */
   var f = p / Math.max(v, 4);
-  var limit = tractionLimit(s);
+  var limit = gripCeiling(s, v);
 
-  /* A clutch only buys you anything while it is still slipping, so its help
-     fades out by the time you are rolling properly. */
-  if(s.launch && s.launch !== 1 && v < 14){
-    limit *= 1 + (s.launch - 1) * (1 - v / 14);
-  }
   return Math.min(f, limit);
+}
+
+/* The most the driven wheels can push at this speed. A clutch only buys you
+   anything while it is still slipping, so its help fades out by the time you
+   are rolling properly. The dyno asks this the same way the engine does, so
+   the graph knows where a car is held back by grip rather than by power
+   without a second copy of the sum to get out of step. */
+function gripCeiling(s, v){
+  var lim = tractionLimit(s);
+  if(s.launch && s.launch !== 1 && v < 14) lim *= 1 + (s.launch - 1) * (1 - v / 14);
+  return lim;
 }
 
 function tractionLimit(s){
@@ -468,6 +478,25 @@ function forceAt(s, v, vMax){
   return f;
 }
 
+/* The speed the car actually stops gaining, which is not the speed its
+   gearing could reach. dragLimited answers "where does thrust meet drag"
+   with no rev limiter in the way; the limiter then fades the last few m/s
+   out from under the car, so it settles a little short of that - about 8
+   mph short, on every car in the game. Walking it with forceAt, the call
+   the driving model makes every frame, is the only way to get a number the
+   car will actually show you on the straight.
+
+   This is what the garage quotes. topSpeed stays exactly what it was, the
+   ceiling the gearbox sets, because that is what the driving model needs
+   as vMax and what the rating has always been scaled against. */
+function flatOut(s){
+  var vMax = topSpeed(s);
+  for(var v = 2; v < vMax; v += 0.25){
+    if(forceAt(s, v, vMax) <= dragForce(s, v) + rollingForce(s)) return v;
+  }
+  return vMax;
+}
+
 /* Standing start to 60 mph, integrated exactly the way the race loop does it,
    ceiling and all. The garage quotes this number, so it had better be the
    same number the car then delivers on track. */
@@ -492,7 +521,13 @@ function gripAt(s, v){ return s.grip + s.down * v * v / 1000; }
    compared. Weighted towards the things that actually win races: power to
    weight and grip, then brakes. */
 function rating(s){
-  var pw = (s.power * 1000) / s.mass;             // W/kg
+  /* Gearing is thrust, and thrust is what fires a car off a corner, so the
+     power term carries it. Without this, short ratios make a car quicker
+     everywhere and LOWER its rating, because the only gearing the rating
+     could see was the top speed it gives away - a free pass into a slower
+     class, the same hole the quad turbo used to walk through. Every car as
+     sold has force = 1, so no showroom number moves. */
+  var pw = (s.power * 1000 * s.force) / s.mass;   // W/kg, geared
   /* Boost is a multiplier on power, so it is worth a share of the power term
      rather than a flat bonus - and only a share, because it does nothing at
      all below `lag`. Without this a quad turbo is free rating: the car stays
@@ -520,7 +555,7 @@ function summary(carKey, parts){
     stats: s,
     rating: r,
     cls: classOf(r),
-    top: topSpeed(s) * MPS_TO_MPH,
+    top: flatOut(s) * MPS_TO_MPH,
     sixty: zeroTo60(s),
     corner: gripAt(s, 30),
     mass: s.mass,
@@ -727,6 +762,204 @@ function deleteKit(index){
   }
   saveNow();
   return true;
+}
+
+/* ------------------------------------------------------- the Speed Demon -- */
+
+/* Speed Demon is the workshop. A rolling road, a set of dials, and the bench
+   you make body kits on, all in one place and all of it free - none of this
+   is a part, it is your own evening with a spanner.
+
+   Every dial is a trade with both halves welded to the same number, so you
+   cannot take the first without the second. They are deliberately finer than
+   anything in the parts list: a dial is the last half second after you have
+   already bought the right gearbox, not a way around buying one.
+
+   They are applied inside carStats, which is the whole point. The dyno, the
+   garage preview, the class rating and the car that actually turns up on the
+   grid are all reading the same build. A tune that made you quicker without
+   moving your rating would be a way of sneaking an S-class car into a club
+   race, so it moves your rating. */
+
+var TUNE_DIALS = [
+  {
+    key: 'gear', name: 'Final drive', mid: 2,
+    d: 'Short gears pull harder everywhere and run out of road sooner.',
+    steps: [
+      { n: 'Very long',  force: 0.90, top: 1.08 },
+      { n: 'Long',       force: 0.95, top: 1.04 },
+      { n: 'Standard',   force: 1.00, top: 1.00 },
+      { n: 'Short',      force: 1.05, top: 0.96 },
+      { n: 'Very short', force: 1.11, top: 0.91 }
+    ]
+  },
+  {
+    key: 'boost', name: 'Boost pressure', mid: 1,
+    needs: 'boost',
+    d: 'More of it, later. A bigger lungful takes longer to fill.',
+    steps: [
+      { n: 'Wastegate cracked', boost: -0.07, lag: -5 },
+      { n: 'Factory',           boost: 0.00,  lag: 0 },
+      { n: 'Turned up',         boost: 0.09,  lag: 5 },
+      { n: 'All of it',         boost: 0.18,  lag: 11 }
+    ]
+  },
+  {
+    key: 'rake', name: 'Rake', mid: 1,
+    d: 'Nose down, and the air presses it into the road on its way past.',
+    steps: [
+      { n: 'Level',     grip: 0.985, cda: 0.96 },
+      { n: 'Factory' },
+      { n: 'Raked',     down: 0.05,  cda: 1.05 },
+      { n: 'Nose down', down: 0.11,  cda: 1.11 }
+    ]
+  }
+];
+
+function dialByKey(key){
+  for(var i = 0; i < TUNE_DIALS.length; i++) if(TUNE_DIALS[i].key === key) return TUNE_DIALS[i];
+  return null;
+}
+
+/* Everything sitting on its middle notch: a car nobody has touched. */
+function neutralTune(){
+  var t = {};
+  for(var i = 0; i < TUNE_DIALS.length; i++) t[TUNE_DIALS[i].key] = TUNE_DIALS[i].mid;
+  return t;
+}
+
+function tuneFor(carKey){
+  if(!SAVE.tune) SAVE.tune = {};
+  if(!SAVE.tune[carKey]) SAVE.tune[carKey] = neutralTune();
+  var t = SAVE.tune[carKey];
+  /* A save written before a dial existed is missing it rather than wrong. */
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    if(typeof t[dial.key] !== 'number') t[dial.key] = dial.mid;
+    t[dial.key] = clamp(Math.round(t[dial.key]), 0, dial.steps.length - 1);
+  }
+  return t;
+}
+
+function setTune(carKey, dialKey, step){
+  var dial = dialByKey(dialKey);
+  if(!dial) return false;
+  tuneFor(carKey)[dialKey] = clamp(Math.round(step), 0, dial.steps.length - 1);
+  saveNow();
+  return true;
+}
+
+function resetTune(carKey){
+  SAVE.tune[carKey] = neutralTune();
+  saveNow();
+}
+
+/* Has this car been touched at all? The garage says so on the card, because
+   a build that is quick for reasons the parts list cannot explain is
+   otherwise a mystery to anyone looking at it later. */
+function isTuned(tune){
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    if((tune && tune[dial.key] !== undefined ? tune[dial.key] : dial.mid) !== dial.mid) return true;
+  }
+  return false;
+}
+
+/* Folded into the stats after the parts, because a dial adjusts what is
+   fitted rather than replacing it. Boost is the exception worth stating: a
+   car with no turbo on it has nothing to turn up, and the dial politely does
+   nothing rather than conjuring boost out of a naturally aspirated engine. */
+function applyTune(s, tune){
+  if(!tune) return s;
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    var step = dial.steps[clamp(Math.round(tune[dial.key] === undefined ? dial.mid : tune[dial.key]),
+                                0, dial.steps.length - 1)];
+    if(!step) continue;
+    if(dial.needs === 'boost' && !(s.boost > 0)) continue;
+    if(step.grip) s.grip *= step.grip;
+    if(step.force) s.force *= step.force;
+    if(step.top) s.top *= step.top;
+    if(step.cda) s.cda *= step.cda;
+    if(step.down) s.down += step.down;
+    if(step.boost) s.boost = Math.max(0, s.boost + step.boost);
+    if(step.lag) s.lag = Math.max(0, s.lag + step.lag);
+  }
+  return s;
+}
+
+/* ------------------------------------------------------------- the dyno -- */
+
+/* A rolling road, and honest about being one: these are figures at the
+   wheels across road speed, not an engine on a bench with rpm along the
+   bottom. This game has no gear ratios to put rpm on that axis with, and
+   drawing one anyway would be inventing a number.
+
+   Both thrust and power come back, because they tell different truths. The
+   engine holds the same power at any speed once it is spinning - the
+   gearbox is what keeps it there - so a power line is a flat line and says
+   almost nothing. Thrust is that same power divided by speed, and the shape
+   of it is the shape of the car: a flat ceiling where the tyres cannot take
+   any more, a long fall where they can, and a cliff at the rev limiter.
+
+   Every line comes out of the same calls the driving model makes, so the
+   graph cannot flatter a car the track will not. */
+function dynoPull(s){
+  var vMax = topSpeed(s);
+  var out = [];
+  var ceiling = Math.max(vMax, 20) + 3;
+  for(var v = 1; v <= ceiling; v += 1){
+    var f = forceAt(s, v, vMax);
+    out.push({
+      v: v,
+      mph: v * MPS_TO_MPH,
+      push: f,                                          // thrust at the wheels, newtons
+      hold: dragForce(s, v) + rollingForce(s),          // what it takes to stay there
+      kw: f * v / 1000,                                 // the same thrust as power
+      slip: f >= gripCeiling(s, v) - 0.5                // held back by grip, not power
+    });
+  }
+  return out;
+}
+
+/* The numbers printed beside the graph. Peak is read off the same samples
+   the graph is drawn from, so the dot and the figure can never disagree. */
+function dynoPeak(s){
+  var pull = dynoPull(s);
+  var best = pull[0], hardest = pull[0], slipTo = 0;
+  for(var i = 0; i < pull.length; i++){
+    if(pull[i].kw > best.kw) best = pull[i];
+    if(pull[i].push > hardest.push) hardest = pull[i];
+    if(pull[i].slip) slipTo = pull[i].mph;
+  }
+  return {
+    pull: pull,
+    kw: best.kw,
+    atMph: best.mph,
+    push: hardest.push,
+    pushAtMph: hardest.mph,
+    flywheel: s.power * (1 + (s.boost || 0)),   // what the engine is claimed to make
+    topMph: flatOut(s) * MPS_TO_MPH,
+    slipTo: slipTo,                             // traction-limited below this
+    boostFrom: s.boost > 0 ? s.lag * MPS_TO_MPH : 0,
+    boostBy: s.boost > 0 ? (s.lag + 8) * MPS_TO_MPH : 0,
+    boost: s.boost || 0,
+    zeroTo60: zeroTo60(s)
+  };
+}
+
+/* The best pull this car has ever put down, kept so a session of fiddling
+   has something to beat. It is per car, not per build: the build is the bit
+   you are changing. */
+function logDyno(carKey, peak){
+  if(!SAVE.dyno) SAVE.dyno = {};
+  var was = SAVE.dyno[carKey];
+  if(!was || peak.kw > was.kw + 0.05){
+    SAVE.dyno[carKey] = { kw: peak.kw, mph: peak.atMph };
+    saveNow();
+    return true;
+  }
+  return false;
 }
 
 var WHEEL_SIZES = [

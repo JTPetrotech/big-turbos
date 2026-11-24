@@ -182,6 +182,18 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 .stat .v em{font-style:normal;font-size:11px;font-family:var(--body);font-weight:800}
 .stat .v em.up{color:var(--green)} .stat .v em.dn{color:var(--red)}
 
+/* the dyno */
+#dynoWrap{margin-top:14px;border:1px solid var(--line);border-radius:12px;
+  background:#0a0c11;padding:9px 10px 2px}
+#dynoChart{width:100%;display:block}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));
+  gap:8px;margin-top:12px}
+.fig{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.fig .n{color:var(--muted);text-transform:uppercase;letter-spacing:.1em;
+  font-weight:800;font-size:9.5px}
+.fig .v{font-family:var(--display);font-size:23px;line-height:1.1;margin-top:2px}
+.fig .v small{font-family:var(--body);font-size:10.5px;font-weight:800;color:var(--muted)}
+
 /* generic list rows */
 .row{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:12px;
   background:var(--panel);border:1px solid var(--line);margin-top:8px;cursor:pointer;
@@ -269,6 +281,9 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
       <button class="go alt" id="btnDrag">Drag strip</button>
       <button class="go alt" id="btnRoam">Free roam</button>
     </div>
+    <div class="btns">
+      <button class="go alt" id="btnDemon">Speed Demon</button>
+    </div>
     <div class="nav">
       <button class="mini" id="btnGarage">Garage</button>
       <button class="mini" id="btnShowroom">Showroom</button>
@@ -328,6 +343,39 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
     <div class="btns">
       <button class="go" id="btnBenchSave">Save it to the garage</button>
       <button class="go alt" id="btnBenchBack">Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- speed demon: the rolling road, the dials and the bench, all in one room -->
+<div class="ov" id="ovDemon">
+  <div class="card wide">
+    <h2>Speed Demon</h2>
+    <p class="sub">The workshop. Put it on the rollers, see where the power
+      actually is, then turn the dials until it is somewhere you want it.
+      None of it costs anything &mdash; a dial is your own evening with a
+      spanner, not a part.</p>
+    <div id="dynoWrap"><canvas id="dynoChart" height="300"></canvas></div>
+    <p class="note2" style="margin-top:6px">How hard the wheels push, against
+      how fast it is going. <b style="color:var(--red)">Red</b> is the engine
+      doing the pushing; <b style="color:var(--amber)">amber</b> is where it
+      has more to give and the tyres will not take it.
+      <b style="color:var(--blue)">Blue</b> is the air and the road pushing
+      back. The shaded gap between them is the only thing that accelerates
+      the car, and where it closes is as fast as it will ever go. A dashed
+      grey line, when there is one, is the same car with the dials put back.</p>
+    <div class="figs" id="demonFigs"></div>
+    <div id="demonDials"></div>
+    <p class="note2" id="demonNote"></p>
+    <div class="btns">
+      <button class="go" id="btnDynoRun">Another pull</button>
+      <button class="go alt" id="btnDemonBench">The Workbench</button>
+    </div>
+    <div class="nav">
+      <button class="mini" id="btnDemonStrip">Take it down the strip</button>
+      <button class="mini" id="btnDemonGarage">Garage</button>
+      <button class="mini" id="btnDemonReset">Put the dials back</button>
+      <button class="mini" id="btnDemonBack">Back</button>
     </div>
   </div>
 </div>
@@ -413,6 +461,376 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 
 </script>
 <script>
+/* PadNav - drive a page's menus with a game controller.
+ *
+ * One file, shared by the Arcade and every game on it. Each repo carries its
+ * own copy because each game ships as one self-contained page; the master is
+ * hub/src/padnav.js, so change it there and copy it out.
+ *
+ *   D-pad / left stick   move between buttons, links and fields
+ *   A (Cross)            press the highlighted thing
+ *   B (Circle)           back: presses a Back/Close/Cancel button, else Escape
+ *   Start (Options)      PadNav.onStart, else Escape
+ *   Right stick          scroll
+ *   Left / right on a slider or a dropdown changes its value
+ *
+ * It only reads buttons while PadNav.active() says a menu is up, so a game
+ * that already uses A for "shoot" sets that hook and the two never fight:
+ *
+ *   PadNav.active  = function(){ return G.phase !== 'play'; };
+ *   PadNav.onStart = function(){ togglePause(); };   // called in play too
+ *   PadNav.root    = function(){ return el('ovPause'); };  // optional fence
+ *
+ * Anything else that should be reachable, a clickable <div>, gets data-pad.
+ * data-pad-default marks where focus lands first; data-pad-back marks the
+ * control B should press.
+ */
+(function(){
+  'use strict';
+  if (window.PadNav) return;
+
+  var PN = window.PadNav = {
+    active: function(){ return true; },
+    onStart: null,
+    onBack: null,
+    root: null,
+    /* true from the first press on a controller until the mouse moves */
+    using: false
+  };
+
+  var SEL = 'a[href],button,input:not([type=hidden]),select,textarea,summary,' +
+            '[tabindex]:not([tabindex="-1"]),[data-pad],[role=button]';
+  /* Only words that undo: never "quit", "leave" or "exit", which B must not
+     be able to do by accident. */
+  var BACK_RE = /^\s*(?:[←‹<]\s*)?(back|close|cancel|resume|not now)\b|^\s*[×✕✖]\s*$/i;
+
+  var css = document.createElement('style');
+  css.textContent =
+    '.pn-focus{outline:3px solid #ffd34d!important;outline-offset:3px!important;' +
+    'box-shadow:0 0 0 7px rgba(255,211,77,.28)!important;transition:outline-color .1s}' +
+    '#pn-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:2147483647;' +
+    'background:rgba(10,12,16,.92);color:#fff;font:600 14px/1.35 system-ui,sans-serif;' +
+    'padding:10px 16px;border-radius:10px;border:1px solid rgba(255,211,77,.5);' +
+    'pointer-events:none;opacity:0;transition:opacity .25s;max-width:90vw;text-align:center}' +
+    '#pn-toast.on{opacity:1}';
+  (document.head || document.documentElement).appendChild(css);
+
+  /* ------------------------------------------------------------ finding -- */
+
+  function isFixedLayer(node){
+    for (var n = node; n && n !== document.body; n = n.parentElement)
+      if (getComputedStyle(n).position === 'fixed') return n;
+    return null;
+  }
+
+  function scrollParent(el){
+    for (var n = el.parentElement; n && n !== document.body; n = n.parentElement){
+      var o = getComputedStyle(n);
+      if (/(auto|scroll|hidden)/.test(o.overflowY + o.overflowX)) return n;
+    }
+    return null;
+  }
+
+  function hitOk(el, x, y){
+    var hit = document.elementFromPoint(x, y);
+    if (!hit) return false;
+    if (hit === el || el.contains(hit)) return true;
+    var lab = hit.closest && hit.closest('label');
+    return !!(lab && lab.contains(el)) || (el.labels && Array.prototype.indexOf.call(el.labels, lab) >= 0);
+  }
+
+  /* Can a person see and press this right now? The hit test is what keeps
+     focus out of a menu that an overlay is sitting on top of. */
+  function usable(el){
+    if (el.disabled || el.closest('[inert],[aria-hidden="true"],[hidden]')) return false;
+    var r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    var cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var sp = scrollParent(el);
+    if (sp){
+      var pr = sp.getBoundingClientRect();
+      /* scrolled out of its box: fine, as long as the box itself is showing */
+      if (cy < pr.top || cy > pr.bottom || cx < pr.left || cx > pr.right){
+        var px = Math.min(Math.max(cx, pr.left + 2), pr.right - 2);
+        var py = Math.min(Math.max(cy, pr.top + 2), pr.bottom - 2);
+        return px >= 0 && py >= 0 && px < innerWidth && py < innerHeight && hitOk(sp, px, py);
+      }
+    }
+    if (cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight) return hitOk(el, cx, cy);
+    /* below the fold of the page: reachable unless a fixed overlay owns the screen */
+    var mid = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    var layer = mid && isFixedLayer(mid);
+    return !layer || layer.contains(el);
+  }
+
+  function scopeEl(){
+    var r = typeof PN.root === 'function' ? PN.root() : PN.root;
+    if (r) return r;
+    var dialogs = document.querySelectorAll('dialog[open]');
+    return dialogs.length ? dialogs[dialogs.length - 1] : document;
+  }
+
+  function candidates(){
+    var all = scopeEl().querySelectorAll(SEL), out = [];
+    for (var i = 0; i < all.length; i++) if (usable(all[i])) out.push(all[i]);
+    return out;
+  }
+
+  /* ------------------------------------------------------------- focus -- */
+
+  var cur = null, curKey = '', curX = 0, curY = 0;
+
+  function keyOf(el){
+    return el.id ? '#' + el.id : el.tagName + '|' + (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 40);
+  }
+
+  function mark(el){
+    if (cur && cur !== el) cur.classList.remove('pn-focus');
+    cur = el;
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    curKey = keyOf(el); curX = r.left + r.width / 2; curY = r.top + r.height / 2;
+    if (!el.matches('a[href],button,input,select,textarea,summary,[tabindex]')) el.setAttribute('tabindex', '-1');
+    try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+    el.classList.add('pn-focus');
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function first(list){
+    for (var i = 0; i < list.length; i++) if (list[i].hasAttribute('data-pad-default')) return list[i];
+    for (i = 0; i < list.length; i++) if (list[i].hasAttribute('autofocus')) return list[i];
+    var a = document.activeElement;
+    if (a && list.indexOf(a) >= 0) return a;
+    return list[0];
+  }
+
+  function current(list){
+    if (cur && list.indexOf(cur) >= 0) return cur;
+    /* Pages that redraw (a poker table every time someone acts) swap the
+       highlighted button for a fresh copy. Pick the copy back up - same id or
+       label, else whatever now sits nearest where it was - rather than
+       starting over in the top corner. */
+    if (cur && !cur.isConnected){
+      var best = null, bestD = Infinity;
+      for (var i = 0; i < list.length; i++){
+        if (keyOf(list[i]) === curKey){ best = list[i]; break; }
+        var r = list[i].getBoundingClientRect();
+        var d = Math.hypot(r.left + r.width / 2 - curX, r.top + r.height / 2 - curY);
+        if (d < bestD && d < 160){ bestD = d; best = list[i]; }
+      }
+      if (best){ mark(best); return best; }
+    }
+    var a = document.activeElement;
+    return a && list.indexOf(a) >= 0 ? a : null;
+  }
+
+  /* Spatial: nearest thing in the pressed direction, with sideways drift
+     costing extra so a column of buttons is walked straight down. */
+  function move(dx, dy){
+    var list = candidates();
+    if (!list.length) return;
+    var from = current(list);
+    if (!from){ mark(first(list)); return; }
+
+    if (dx && adjust(from, dx)) return;
+
+    var a = from.getBoundingClientRect();
+    var ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+    /* First only what lies that way; if that finds nothing, up and down
+       settle for the nearest row even when it sits off to one side. */
+    var best = pickDir(list, from, a, ax, ay, dx, dy, true);
+    if (!best && dy) best = pickDir(list, from, a, ax, ay, dx, dy, false);
+    if (best) mark(best);
+  }
+
+  function pickDir(list, from, a, ax, ay, dx, dy, cone){
+    var best = null, bestScore = Infinity;
+    for (var i = 0; i < list.length; i++){
+      var c = list[i];
+      if (c === from || c.contains(from) || from.contains(c)) continue;
+      var b = c.getBoundingClientRect();
+      var bx = b.left + b.width / 2, by = b.top + b.height / 2;
+      var along, side;
+      if (dx){
+        if ((bx - ax) * dx <= 4) continue;
+        along = dx > 0 ? b.left - a.right : a.left - b.right;
+        side = Math.max(0, Math.max(a.top, b.top) - Math.min(a.bottom, b.bottom));
+      } else {
+        if ((by - ay) * dy <= 4) continue;
+        along = dy > 0 ? b.top - a.bottom : a.top - b.bottom;
+        side = Math.max(0, Math.max(a.left, b.left) - Math.min(a.right, b.right));
+      }
+      /* nothing that way at all beats a leap to the far corner of the page */
+      var off = Math.abs(dx ? by - ay : bx - ax), ahead = Math.abs(dx ? bx - ax : by - ay);
+      if (cone && side > 0 && off > ahead * 1.2) continue;
+      var score = Math.max(along, 0) + side * 2.5 + off * 0.15;
+      if (score < bestScore){ bestScore = score; best = c; }
+    }
+    return best;
+  }
+
+  function fire(el, type){ el.dispatchEvent(new Event(type, { bubbles: true })); }
+
+  /* Left/right on a slider or a dropdown changes it instead of leaving it. */
+  function adjust(el, dir){
+    if (el.tagName === 'INPUT' && el.type === 'range'){
+      var step = parseFloat(el.step) || 1;
+      var span = (parseFloat(el.max) || 100) - (parseFloat(el.min) || 0);
+      if (span / step > 40) step = span / 40;       // big ranges move in 40 stops
+      var before = el.value;
+      el.value = String(parseFloat(el.value) + dir * step);
+      if (el.value !== before){ fire(el, 'input'); fire(el, 'change'); }
+      return true;
+    }
+    if (el.tagName === 'SELECT' && el.options.length){
+      var i = Math.min(el.options.length - 1, Math.max(0, el.selectedIndex + dir));
+      if (i !== el.selectedIndex){ el.selectedIndex = i; fire(el, 'input'); fire(el, 'change'); }
+      return true;
+    }
+    return false;
+  }
+
+  function press(){
+    var list = candidates();
+    var el = current(list);
+    if (!el){ if (list.length) mark(first(list)); return; }
+    if (el.tagName === 'SELECT'){
+      el.selectedIndex = (el.selectedIndex + 1) % el.options.length;
+      fire(el, 'input'); fire(el, 'change');
+      return;
+    }
+    if (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image)$/.test(el.type))){
+      el.focus(); if (el.select) el.select();
+      return;
+    }
+    el.click();
+  }
+
+  function key(code){
+    var t = document.activeElement && document.activeElement !== document.body ? document.activeElement : document;
+    var k = code === 'Escape' ? 'Escape' : code;
+    t.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: code, bubbles: true, cancelable: true }));
+    t.dispatchEvent(new KeyboardEvent('keyup', { key: k, code: code, bubbles: true, cancelable: true }));
+  }
+
+  function back(){
+    if (PN.onBack && PN.onBack() !== false) return;
+    var list = candidates();
+    for (var i = 0; i < list.length; i++){
+      var c = list[i];
+      var label = (c.getAttribute('aria-label') || c.textContent || c.value || '').trim();
+      if (c.hasAttribute('data-pad-back') || BACK_RE.test(label)){ c.click(); return; }
+    }
+    key('Escape');
+  }
+
+  /* ------------------------------------------------------------- toast -- */
+
+  var toast = null, toastT = 0;
+  function say(msg){
+    if (!document.body) return;
+    if (!toast){ toast = document.createElement('div'); toast.id = 'pn-toast'; document.body.appendChild(toast); }
+    toast.textContent = msg;
+    toast.classList.add('on');
+    clearTimeout(toastT);
+    toastT = setTimeout(function(){ toast.classList.remove('on'); }, 3800);
+  }
+  var greeted = false;
+
+  /* ------------------------------------------------------------- polling -- */
+  /* The Gamepad API has no button events, so every pad is read each frame. */
+
+  var prev = {};             // pad index -> array of pressed flags
+  var held = null, repeatAt = 0, wasAct = true;
+
+  function pressed(gp, i){ var b = gp.buttons[i]; return !!(b && (b.pressed || b.value > 0.5)); }
+
+  function tick(now){
+    requestAnimationFrame(tick);
+    var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    var act = false;
+    try { act = !!PN.active() && !document.pointerLockElement; } catch (e) { act = false; }
+    var dirX = 0, dirY = 0, scroll = 0;
+    var edges = {};
+
+    for (var p = 0; p < pads.length; p++){
+      var gp = pads[p];
+      if (!gp || !gp.connected) continue;
+      var was = prev[p] || [], now_ = [];
+      for (var b = 0; b < gp.buttons.length; b++){
+        now_[b] = pressed(gp, b);
+        if (now_[b] && !was[b]) edges[b] = true;
+      }
+      prev[p] = now_;
+      var lx = gp.axes[0] || 0, ly = gp.axes[1] || 0, ry = gp.axes[3] || 0;
+      if (now_[14] || lx < -0.55) dirX = -1;
+      if (now_[15] || lx > 0.55) dirX = 1;
+      if (now_[12] || ly < -0.55) dirY = -1;
+      if (now_[13] || ly > 0.55) dirY = 1;
+      if (Math.abs(ry) > 0.2) scroll = ry;
+    }
+
+    var anyEdge = false; for (var e in edges){ anyEdge = true; break; }
+    if (anyEdge && !greeted && act){
+      greeted = true;
+      say('Controller ready — D-pad to move, A to select, B to go back');
+    }
+    if (anyEdge) PN.using = true;
+
+    if (edges[9]){
+      if (PN.onStart) PN.onStart();
+      else if (act) key('Escape');
+    }
+    /* a menu just opened over the game: start with its first button lit */
+    if (act && !wasAct && PN.using) setTimeout(PN.reset, 60);
+    wasAct = act;
+    if (!act){ held = null; return; }
+
+    /* one diagonal at a time: whichever axis is pressed is the move */
+    var dir = dirY ? 'y' + dirY : dirX ? 'x' + dirX : null;
+    if (dir){
+      if (dir !== held){ held = dir; repeatAt = now + 380; PN.using = true; go(dir); }
+      else if (now >= repeatAt){ repeatAt = now + 110; go(dir); }
+    } else held = null;
+
+    if (edges[0]) press();
+    if (edges[1]) back();
+
+    if (scroll){
+      var tgt = cur && scrollParent(cur);
+      (tgt || document.scrollingElement || document.documentElement).scrollBy(0, scroll * 16);
+    }
+  }
+
+  function go(dir){
+    if (dir === 'x-1') move(-1, 0); else if (dir === 'x1') move(1, 0);
+    else if (dir === 'y-1') move(0, -1); else move(0, 1);
+  }
+
+  /* moving the mouse hands the page back to the mouse */
+  var mx = -1, my = -1;
+  addEventListener('mousemove', function(ev){
+    if (Math.abs(ev.clientX - mx) + Math.abs(ev.clientY - my) < 6) return;
+    mx = ev.clientX; my = ev.clientY;
+    PN.using = false;
+    if (cur){ cur.classList.remove('pn-focus'); cur = null; }
+  }, { passive: true });
+
+  addEventListener('gamepadconnected', function(){ greeted = false; });
+  if (navigator.getGamepads) requestAnimationFrame(tick);
+
+  /* for games: focus the best control in whatever menu just opened */
+  PN.reset = function(){
+    if (cur){ cur.classList.remove('pn-focus'); cur = null; }
+    if (!PN.using) return;
+    var list = candidates();
+    if (list.length) mark(first(list));
+  };
+  PN.say = say;
+  PN.candidates = candidates;   // what a press can reach right now (for debugging)
+})();
 /* =========================================================================
    1  CORE
 
@@ -603,6 +1021,8 @@ function freshSave(){
     bestEt: {},                // car key -> best quarter mile
     plate: '',                 // what it says on the numberplate
     kits: [],                  // body kits built in the Workbench
+    tune: {},                  // carKey -> Speed Demon dial positions
+    dyno: {},                  // carKey -> the best pull it has put down
     freeBuild: true,           // unlimited money: parts and cars cost nothing
     seen: false
   };
@@ -1375,7 +1795,10 @@ function animateCar(obj, speed, steer, dt){
   if(!u || !u.wheels) return;
   var spin = (speed * dt) / 0.33;
   for(var i = 0; i < u.wheels.length; i++) u.wheels[i].rotation.x -= spin;
-  for(var j = 0; j < u.steered.length; j++) u.steered[j].rotation.y = steer * 0.44;
+  /* Negated, because rotation.y turns a wheel to its left and the steer this
+     is handed is positive for right. The front wheels used to point the way
+     the car was not going, which is a quiet confirmation of the same slip. */
+  for(var j = 0; j < u.steered.length; j++) u.steered[j].rotation.y = -steer * 0.44;
 }
 /* =========================================================================
    4  DRIVING
@@ -1401,7 +1824,7 @@ var DRAG_LEN = 402.336;       // a quarter of a mile, in metres
 
 function makeCar(carKey, parts, opts){
   opts = opts || {};
-  var stats = carStats(carKey, parts || {});
+  var stats = carStats(carKey, parts || {}, opts.tune);
   return {
     key: carKey,
     name: opts.name || CARS[carKey].name,
@@ -1500,7 +1923,14 @@ function stepCar(car, track, input, dt){
      sits there with its wheels turned, and without this the car pirouettes
      on the spot the moment it stops. */
   var rolling = clamp(speed / 5, 0, 1);
-  var want = car.steer * s.steer * speedEase * rolling * sign(car.vf || 1);
+  /* Negated, and this is the one that mattered: a positive rotation about Y
+     turns a body to its LEFT, and the whole world agrees with that - track
+     headings are atan2(dx, dz) and the car mesh is turned by rotation.y =
+     yaw with no correction anywhere. A steering request is the other way
+     round, positive for right, because that is what the right-hand key
+     means. Treating the two as the same number is what made the steering
+     backwards: every car turned away from the key you were holding. */
+  var want = -car.steer * s.steer * speedEase * rolling * sign(car.vf || 1);
   car.yawRate += (want - car.yawRate) * clamp(dt * 9, 0, 1);
   car.yaw += car.yawRate * dt;
 
@@ -1519,7 +1949,12 @@ function stepCar(car, track, input, dt){
      place the weight tiers' downside is felt, and it is deliberately felt on
      the limit rather than everywhere. */
   if(Math.abs(car.vl) > 0.9){
-    car.yaw += sign(car.vl) * (1 - s.stability) * Math.abs(car.vl) * 0.16 * dt;
+    /* Minus, for the same handedness reason. Lateral speed is positive
+       towards the car own left, which is where the velocity ends up in a
+       RIGHT turn, and a right turn is yaw going down. With a plus here the
+       term quietly did the opposite of what it says: it steadied the cars
+       it was meant to unsettle, and most of all the lightest ones. */
+    car.yaw -= sign(car.vl) * (1 - s.stability) * Math.abs(car.vl) * 0.16 * dt;
   }
 
   /* ---- into the world ---- */
@@ -1726,7 +2161,10 @@ function aiInput(car, track, cars){
   /* Steer towards it. */
   var wantYaw = Math.atan2(tx - car.x, tz - car.z);
   var err = angDiff(car.yaw, wantYaw);
-  var steer = clamp(err * 2.0, -1, 1);
+  /* Right-positive, like the player request, so stepCar negates both the
+     same way. The product is unchanged, which is why the field drives
+     exactly as it drove before. */
+  var steer = clamp(-err * 2.0, -1, 1);
 
   /* Pace. A skill below 1 both corners slower and hesitates on the throttle,
      so the back of the field is beatable without being stationary. */
@@ -1747,7 +2185,9 @@ function aiInput(car, track, cars){
     var fwd = dx * Math.sin(car.yaw) + dz * Math.cos(car.yaw);
     if(fwd < 1.2) continue;                    // alongside or behind: ignore
     var side = dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw);
-    steer += (side > 0 ? -0.5 : 0.5);
+    /* side is positive when the other car sits off to this one left, so the
+       way round to pull is right, which is positive in the convention above. */
+    steer += (side > 0 ? 0.5 : -0.5);
     if(Math.abs(side) < 2.1) throttle *= 0.82;
   }
 
@@ -2153,7 +2593,7 @@ function tierOf(carKey, slotKey){
    car and its fitted parts it is a pure function - no globals, no state -
    which is what makes it testable and what makes the garage preview honest:
    the numbers shown before you buy are produced by this same call. */
-function carStats(carKey, parts){
+function carStats(carKey, parts, tune){
   var base = CARS[carKey];
   if(!base) throw new Error('no car called ' + carKey);
   parts = parts || {};
@@ -2205,6 +2645,10 @@ function carStats(carKey, parts){
   }
   s.offroad = clamp(s.offroad, 0, 1);
 
+  /* The Speed Demon dials go on after the parts, because a dial adjusts
+     what is fitted rather than standing in for it. */
+  applyTune(s, tune);
+
   /* A locked differential drags the car straight: it is why a spool puts
      power down and why it will not turn. Both halves come off the one
      number, so you cannot have the first without the second. */
@@ -2216,7 +2660,7 @@ function carStats(carKey, parts){
   return s;
 }
 
-function statsOf(carKey){ return carStats(carKey, partsFor(carKey)); }
+function statsOf(carKey){ return carStats(carKey, partsFor(carKey), tuneFor(carKey)); }
 
 /* ------------------------------------------------------------- derived -- */
 
@@ -2248,14 +2692,20 @@ function driveForce(s, v){
   /* Below walking pace, power/v runs away to infinity. Clamp to the traction
      limit, which is what actually stops a real car from launching harder. */
   var f = p / Math.max(v, 4);
-  var limit = tractionLimit(s);
+  var limit = gripCeiling(s, v);
 
-  /* A clutch only buys you anything while it is still slipping, so its help
-     fades out by the time you are rolling properly. */
-  if(s.launch && s.launch !== 1 && v < 14){
-    limit *= 1 + (s.launch - 1) * (1 - v / 14);
-  }
   return Math.min(f, limit);
+}
+
+/* The most the driven wheels can push at this speed. A clutch only buys you
+   anything while it is still slipping, so its help fades out by the time you
+   are rolling properly. The dyno asks this the same way the engine does, so
+   the graph knows where a car is held back by grip rather than by power
+   without a second copy of the sum to get out of step. */
+function gripCeiling(s, v){
+  var lim = tractionLimit(s);
+  if(s.launch && s.launch !== 1 && v < 14) lim *= 1 + (s.launch - 1) * (1 - v / 14);
+  return lim;
 }
 
 function tractionLimit(s){
@@ -2289,6 +2739,25 @@ function forceAt(s, v, vMax){
   return f;
 }
 
+/* The speed the car actually stops gaining, which is not the speed its
+   gearing could reach. dragLimited answers "where does thrust meet drag"
+   with no rev limiter in the way; the limiter then fades the last few m/s
+   out from under the car, so it settles a little short of that - about 8
+   mph short, on every car in the game. Walking it with forceAt, the call
+   the driving model makes every frame, is the only way to get a number the
+   car will actually show you on the straight.
+
+   This is what the garage quotes. topSpeed stays exactly what it was, the
+   ceiling the gearbox sets, because that is what the driving model needs
+   as vMax and what the rating has always been scaled against. */
+function flatOut(s){
+  var vMax = topSpeed(s);
+  for(var v = 2; v < vMax; v += 0.25){
+    if(forceAt(s, v, vMax) <= dragForce(s, v) + rollingForce(s)) return v;
+  }
+  return vMax;
+}
+
 /* Standing start to 60 mph, integrated exactly the way the race loop does it,
    ceiling and all. The garage quotes this number, so it had better be the
    same number the car then delivers on track. */
@@ -2313,7 +2782,13 @@ function gripAt(s, v){ return s.grip + s.down * v * v / 1000; }
    compared. Weighted towards the things that actually win races: power to
    weight and grip, then brakes. */
 function rating(s){
-  var pw = (s.power * 1000) / s.mass;             // W/kg
+  /* Gearing is thrust, and thrust is what fires a car off a corner, so the
+     power term carries it. Without this, short ratios make a car quicker
+     everywhere and LOWER its rating, because the only gearing the rating
+     could see was the top speed it gives away - a free pass into a slower
+     class, the same hole the quad turbo used to walk through. Every car as
+     sold has force = 1, so no showroom number moves. */
+  var pw = (s.power * 1000 * s.force) / s.mass;   // W/kg, geared
   /* Boost is a multiplier on power, so it is worth a share of the power term
      rather than a flat bonus - and only a share, because it does nothing at
      all below `lag`. Without this a quad turbo is free rating: the car stays
@@ -2341,7 +2816,7 @@ function summary(carKey, parts){
     stats: s,
     rating: r,
     cls: classOf(r),
-    top: topSpeed(s) * MPS_TO_MPH,
+    top: flatOut(s) * MPS_TO_MPH,
     sixty: zeroTo60(s),
     corner: gripAt(s, 30),
     mass: s.mass,
@@ -2550,6 +3025,204 @@ function deleteKit(index){
   return true;
 }
 
+/* ------------------------------------------------------- the Speed Demon -- */
+
+/* Speed Demon is the workshop. A rolling road, a set of dials, and the bench
+   you make body kits on, all in one place and all of it free - none of this
+   is a part, it is your own evening with a spanner.
+
+   Every dial is a trade with both halves welded to the same number, so you
+   cannot take the first without the second. They are deliberately finer than
+   anything in the parts list: a dial is the last half second after you have
+   already bought the right gearbox, not a way around buying one.
+
+   They are applied inside carStats, which is the whole point. The dyno, the
+   garage preview, the class rating and the car that actually turns up on the
+   grid are all reading the same build. A tune that made you quicker without
+   moving your rating would be a way of sneaking an S-class car into a club
+   race, so it moves your rating. */
+
+var TUNE_DIALS = [
+  {
+    key: 'gear', name: 'Final drive', mid: 2,
+    d: 'Short gears pull harder everywhere and run out of road sooner.',
+    steps: [
+      { n: 'Very long',  force: 0.90, top: 1.08 },
+      { n: 'Long',       force: 0.95, top: 1.04 },
+      { n: 'Standard',   force: 1.00, top: 1.00 },
+      { n: 'Short',      force: 1.05, top: 0.96 },
+      { n: 'Very short', force: 1.11, top: 0.91 }
+    ]
+  },
+  {
+    key: 'boost', name: 'Boost pressure', mid: 1,
+    needs: 'boost',
+    d: 'More of it, later. A bigger lungful takes longer to fill.',
+    steps: [
+      { n: 'Wastegate cracked', boost: -0.07, lag: -5 },
+      { n: 'Factory',           boost: 0.00,  lag: 0 },
+      { n: 'Turned up',         boost: 0.09,  lag: 5 },
+      { n: 'All of it',         boost: 0.18,  lag: 11 }
+    ]
+  },
+  {
+    key: 'rake', name: 'Rake', mid: 1,
+    d: 'Nose down, and the air presses it into the road on its way past.',
+    steps: [
+      { n: 'Level',     grip: 0.985, cda: 0.96 },
+      { n: 'Factory' },
+      { n: 'Raked',     down: 0.05,  cda: 1.05 },
+      { n: 'Nose down', down: 0.11,  cda: 1.11 }
+    ]
+  }
+];
+
+function dialByKey(key){
+  for(var i = 0; i < TUNE_DIALS.length; i++) if(TUNE_DIALS[i].key === key) return TUNE_DIALS[i];
+  return null;
+}
+
+/* Everything sitting on its middle notch: a car nobody has touched. */
+function neutralTune(){
+  var t = {};
+  for(var i = 0; i < TUNE_DIALS.length; i++) t[TUNE_DIALS[i].key] = TUNE_DIALS[i].mid;
+  return t;
+}
+
+function tuneFor(carKey){
+  if(!SAVE.tune) SAVE.tune = {};
+  if(!SAVE.tune[carKey]) SAVE.tune[carKey] = neutralTune();
+  var t = SAVE.tune[carKey];
+  /* A save written before a dial existed is missing it rather than wrong. */
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    if(typeof t[dial.key] !== 'number') t[dial.key] = dial.mid;
+    t[dial.key] = clamp(Math.round(t[dial.key]), 0, dial.steps.length - 1);
+  }
+  return t;
+}
+
+function setTune(carKey, dialKey, step){
+  var dial = dialByKey(dialKey);
+  if(!dial) return false;
+  tuneFor(carKey)[dialKey] = clamp(Math.round(step), 0, dial.steps.length - 1);
+  saveNow();
+  return true;
+}
+
+function resetTune(carKey){
+  SAVE.tune[carKey] = neutralTune();
+  saveNow();
+}
+
+/* Has this car been touched at all? The garage says so on the card, because
+   a build that is quick for reasons the parts list cannot explain is
+   otherwise a mystery to anyone looking at it later. */
+function isTuned(tune){
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    if((tune && tune[dial.key] !== undefined ? tune[dial.key] : dial.mid) !== dial.mid) return true;
+  }
+  return false;
+}
+
+/* Folded into the stats after the parts, because a dial adjusts what is
+   fitted rather than replacing it. Boost is the exception worth stating: a
+   car with no turbo on it has nothing to turn up, and the dial politely does
+   nothing rather than conjuring boost out of a naturally aspirated engine. */
+function applyTune(s, tune){
+  if(!tune) return s;
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    var step = dial.steps[clamp(Math.round(tune[dial.key] === undefined ? dial.mid : tune[dial.key]),
+                                0, dial.steps.length - 1)];
+    if(!step) continue;
+    if(dial.needs === 'boost' && !(s.boost > 0)) continue;
+    if(step.grip) s.grip *= step.grip;
+    if(step.force) s.force *= step.force;
+    if(step.top) s.top *= step.top;
+    if(step.cda) s.cda *= step.cda;
+    if(step.down) s.down += step.down;
+    if(step.boost) s.boost = Math.max(0, s.boost + step.boost);
+    if(step.lag) s.lag = Math.max(0, s.lag + step.lag);
+  }
+  return s;
+}
+
+/* ------------------------------------------------------------- the dyno -- */
+
+/* A rolling road, and honest about being one: these are figures at the
+   wheels across road speed, not an engine on a bench with rpm along the
+   bottom. This game has no gear ratios to put rpm on that axis with, and
+   drawing one anyway would be inventing a number.
+
+   Both thrust and power come back, because they tell different truths. The
+   engine holds the same power at any speed once it is spinning - the
+   gearbox is what keeps it there - so a power line is a flat line and says
+   almost nothing. Thrust is that same power divided by speed, and the shape
+   of it is the shape of the car: a flat ceiling where the tyres cannot take
+   any more, a long fall where they can, and a cliff at the rev limiter.
+
+   Every line comes out of the same calls the driving model makes, so the
+   graph cannot flatter a car the track will not. */
+function dynoPull(s){
+  var vMax = topSpeed(s);
+  var out = [];
+  var ceiling = Math.max(vMax, 20) + 3;
+  for(var v = 1; v <= ceiling; v += 1){
+    var f = forceAt(s, v, vMax);
+    out.push({
+      v: v,
+      mph: v * MPS_TO_MPH,
+      push: f,                                          // thrust at the wheels, newtons
+      hold: dragForce(s, v) + rollingForce(s),          // what it takes to stay there
+      kw: f * v / 1000,                                 // the same thrust as power
+      slip: f >= gripCeiling(s, v) - 0.5                // held back by grip, not power
+    });
+  }
+  return out;
+}
+
+/* The numbers printed beside the graph. Peak is read off the same samples
+   the graph is drawn from, so the dot and the figure can never disagree. */
+function dynoPeak(s){
+  var pull = dynoPull(s);
+  var best = pull[0], hardest = pull[0], slipTo = 0;
+  for(var i = 0; i < pull.length; i++){
+    if(pull[i].kw > best.kw) best = pull[i];
+    if(pull[i].push > hardest.push) hardest = pull[i];
+    if(pull[i].slip) slipTo = pull[i].mph;
+  }
+  return {
+    pull: pull,
+    kw: best.kw,
+    atMph: best.mph,
+    push: hardest.push,
+    pushAtMph: hardest.mph,
+    flywheel: s.power * (1 + (s.boost || 0)),   // what the engine is claimed to make
+    topMph: flatOut(s) * MPS_TO_MPH,
+    slipTo: slipTo,                             // traction-limited below this
+    boostFrom: s.boost > 0 ? s.lag * MPS_TO_MPH : 0,
+    boostBy: s.boost > 0 ? (s.lag + 8) * MPS_TO_MPH : 0,
+    boost: s.boost || 0,
+    zeroTo60: zeroTo60(s)
+  };
+}
+
+/* The best pull this car has ever put down, kept so a session of fiddling
+   has something to beat. It is per car, not per build: the build is the bit
+   you are changing. */
+function logDyno(carKey, peak){
+  if(!SAVE.dyno) SAVE.dyno = {};
+  var was = SAVE.dyno[carKey];
+  if(!was || peak.kw > was.kw + 0.05){
+    SAVE.dyno[carKey] = { kw: peak.kw, mph: peak.atMph };
+    saveNow();
+    return true;
+  }
+  return false;
+}
+
 var WHEEL_SIZES = [
   { n: 'Stock', d: 0 }, { n: 'Plus one', d: 0.025 },
   { n: 'Plus two', d: 0.05 }, { n: 'Dish', d: 0.075 }
@@ -2751,12 +3424,12 @@ var BARS = [
   { key: 'mass', name: 'Weight', lo: 1750, hi: 600, fmt: function(s){ return Math.round(s.mass) + ' kg'; } },
   { key: 'grip', name: 'Grip', lo: 0.85, hi: 2.0, fmt: function(s){ return gripAt(s, 30).toFixed(2) + 'g'; } },
   { key: 'brake', name: 'Brakes', lo: 8, hi: 17, fmt: function(s){ return s.brake.toFixed(1); } },
-  { key: 'top', name: 'Top speed', lo: 85, hi: 215, fmt: function(s){ return Math.round(topSpeed(s) * MPS_TO_MPH) + ' mph'; } },
+  { key: 'top', name: 'Top speed', lo: 85, hi: 215, fmt: function(s){ return Math.round(flatOut(s) * MPS_TO_MPH) + ' mph'; } },
   { key: 'sixty', name: '0-60', lo: 11, hi: 2, fmt: function(s){ var z = zeroTo60(s); return z > 50 ? '--' : z.toFixed(1) + 's'; } }
 ];
 
 function barValue(key, s){
-  if(key === 'top') return topSpeed(s) * MPS_TO_MPH;
+  if(key === 'top') return flatOut(s) * MPS_TO_MPH;
   if(key === 'sixty') return zeroTo60(s);
   if(key === 'grip') return gripAt(s, 30);
   return s[key];
@@ -2996,7 +3669,7 @@ function drawShowroom(){
             '<div class="d">' + car.desc + '</div>' +
             '<div style="margin-top:6px">' +
             '<span class="chip cls">Class ' + classOf(r) + '</span>' +
-            '<span class="chip">' + Math.round(topSpeed(s) * MPS_TO_MPH) + ' mph</span>' +
+            '<span class="chip">' + Math.round(flatOut(s) * MPS_TO_MPH) + ' mph</span>' +
             '<span class="chip">0-60 ' + zeroTo60(s).toFixed(1) + 's</span>' +
             '<span class="chip">' + Math.round(s.mass) + ' kg</span>' +
             '</div></div>' + right + '</div>';
@@ -3450,6 +4123,252 @@ function renderWager(ev){
       money(Math.round(wagerStake * odds)) + '</b> on top. Finish anywhere else and ' +
       'the <b style="color:var(--red)">' + money(wagerStake) + '</b> is gone.';
 }
+
+/* ------------------------------------------------------- the Speed Demon -- */
+
+/* The workshop screen: a rolling road with the dials underneath it, so a
+   change and its consequence are on the same page. Everything drawn here is
+   produced by dynoPull and dynoPeak, which are the driving model's own sums -
+   there is no second idea of how much power this car makes. */
+
+var demonSweep = null;        // timestamp of the pull currently being drawn
+
+function openDemon(){
+  hideAll();
+  show('ovDemon');
+  drawDemon();
+  dynoRun();
+}
+
+function closeDemon(){
+  demonSweep = null;
+  backToMenu();
+}
+
+function tick(){
+  return (typeof performance !== 'undefined' && performance.now)
+    ? performance.now() : Date.now();
+}
+
+/* A pull sweeps across rather than appearing, because that is what watching
+   one is like, and because it makes a changed dial obvious. */
+function dynoRun(){
+  var started = tick();
+  demonSweep = started;
+  function frame(){
+    if(demonSweep !== started) return;        // a newer pull took this over
+    var p = clamp((tick() - started) / 620, 0, 1);
+    drawDyno(p);
+    if(p < 1){ requestAnimationFrame(frame); return; }
+    demonSweep = null;
+    var peak = dynoPeak(statsOf(SAVE.car));
+    var beat = logDyno(SAVE.car, peak);
+    var best = (SAVE.dyno || {})[SAVE.car];
+    /* The figures were drawn before the pull finished, so the best-pull
+       one is a run out of date by the time there is a best pull. */
+    if(beat) drawDemon();
+    $('demonNote').textContent = beat
+      ? 'Best pull yet for the ' + CARS[SAVE.car].name + ': ' +
+        Math.round(peak.kw) + ' kW at the wheels.'
+      : 'Best this car has put down: ' + Math.round(best.kw) + ' kW at ' +
+        Math.round(best.mph) + ' mph.';
+  }
+  requestAnimationFrame(frame);
+}
+
+/* The graph is thrust against road speed, not power against rpm, and the
+   comment on dynoPull says why. Two lines: what the wheels can push, and
+   what the air and the tyres take back. The gap between them is the only
+   thing that makes a car accelerate, so it is shaded in - when it closes,
+   you have arrived at your top speed, and you can see it coming. */
+function drawDyno(p){
+  var cv = $('dynoChart');
+  if(!cv) return;
+  var g = cv.getContext('2d');
+  var w = Math.max(cv.clientWidth || 0, 280), h = 300;
+  var dpr = window.devicePixelRatio || 1;
+  if(cv.width !== Math.round(w * dpr)){
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+  }
+  cv.style.height = h + 'px';
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  var s = statsOf(SAVE.car);
+  var peak = dynoPeak(s);
+  var pull = peak.pull;
+  /* The untouched car, faintly, whenever the dials have been moved: the
+     point of a dial is the difference it makes, and a difference needs the
+     thing it is different from. */
+  var stock = isTuned(tuneFor(SAVE.car))
+    ? dynoPull(carStats(SAVE.car, partsFor(SAVE.car), neutralTune())) : null;
+
+  var x0 = 48, x1 = w - 12, y0 = 14, y1 = h - 28;
+  var maxMph = Math.max(peak.topMph, 60) * 1.08;
+  var maxN = 10;
+  for(var i = 0; i < pull.length; i++) maxN = Math.max(maxN, pull[i].push, pull[i].hold);
+  if(stock) for(var j = 0; j < stock.length; j++) maxN = Math.max(maxN, stock[j].push);
+  maxN *= 1.1;
+  function X(m){ return x0 + (x1 - x0) * clamp(m / maxMph, 0, 1); }
+  function Y(n){ return y1 - (y1 - y0) * clamp(n / maxN, 0, 1); }
+
+  /* --- grid and labels --- */
+  g.font = '10px "Barlow",Arial,sans-serif';
+  g.lineWidth = 1;
+  var mphStep = maxMph > 220 ? 50 : 25;
+  for(var m = 0; m <= maxMph; m += mphStep){
+    var gx = Math.round(X(m)) + 0.5;
+    g.strokeStyle = '#1b2029';
+    g.beginPath(); g.moveTo(gx, y0); g.lineTo(gx, y1); g.stroke();
+    g.fillStyle = '#5c6677';
+    g.textAlign = 'center';
+    g.fillText(String(m), gx, y1 + 14);
+  }
+  var nStep = maxN > 14000 ? 5000 : (maxN > 6000 ? 2000 : 1000);
+  for(var n = 0; n <= maxN; n += nStep){
+    var gy = Math.round(Y(n)) + 0.5;
+    g.strokeStyle = '#1b2029';
+    g.beginPath(); g.moveTo(x0, gy); g.lineTo(x1, gy); g.stroke();
+    g.fillStyle = '#5c6677';
+    g.textAlign = 'right';
+    g.fillText(n >= 1000 ? (n / 1000) + 'k' : String(n), x0 - 6, gy + 3);
+  }
+  g.fillStyle = '#5c6677';
+  g.textAlign = 'left';
+  g.fillText('newtons at the wheels', x0 + 3, y0 + 9);
+  g.textAlign = 'right';
+  g.fillText('mph', x1, y1 + 14);
+
+  /* --- where the turbo is still asleep --- */
+  if(peak.boost > 0 && peak.boostBy > 0){
+    g.fillStyle = 'rgba(74,158,255,.06)';
+    g.fillRect(X(0), y0, X(peak.boostFrom) - X(0), y1 - y0);
+    g.fillStyle = 'rgba(74,158,255,.11)';
+    g.fillRect(X(peak.boostFrom), y0, X(peak.boostBy) - X(peak.boostFrom), y1 - y0);
+  }
+
+  var cut = Math.max(2, Math.ceil(pull.length * p));
+
+  /* --- the gap, which is the acceleration --- */
+  g.beginPath();
+  var opened = false, last = 0;
+  for(var a = 0; a < Math.min(cut, pull.length); a++){
+    if(pull[a].push <= pull[a].hold) break;
+    if(!opened){ g.moveTo(X(pull[a].mph), Y(pull[a].push)); opened = true; }
+    else g.lineTo(X(pull[a].mph), Y(pull[a].push));
+    last = a;
+  }
+  if(opened){
+    for(var b = last; b >= 0; b--) g.lineTo(X(pull[b].mph), Y(pull[b].hold));
+    g.closePath();
+    g.fillStyle = 'rgba(255,59,48,.10)';
+    g.fill();
+  }
+
+  function line(samples, pick, colour, width, dashed){
+    g.beginPath();
+    for(var i2 = 0; i2 < Math.min(cut, samples.length); i2++){
+      var sx = X(samples[i2].mph), sy = Y(pick(samples[i2]));
+      if(i2 === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy);
+    }
+    g.strokeStyle = colour;
+    g.lineWidth = width;
+    g.setLineDash(dashed ? [4, 4] : []);
+    g.stroke();
+    g.setLineDash([]);
+  }
+
+  if(stock) line(stock, function(d){ return d.push; }, 'rgba(238,242,247,.3)', 1.6, true);
+  line(pull, function(d){ return d.hold; }, '#4a9eff', 1.8, false);
+
+  /* The thrust line is drawn in two colours: where the engine is the limit,
+     and where the tyres are. A car that is amber a long way up the graph is
+     not short of power, it is short of grip, and no amount of turbo will fix
+     that. The distinction is most of what a rolling road is for. */
+  for(var i3 = 1; i3 < Math.min(cut, pull.length); i3++){
+    g.beginPath();
+    g.moveTo(X(pull[i3 - 1].mph), Y(pull[i3 - 1].push));
+    g.lineTo(X(pull[i3].mph), Y(pull[i3].push));
+    g.strokeStyle = pull[i3].slip ? '#ffd166' : '#ff3b30';
+    g.lineWidth = 2.6;
+    g.stroke();
+  }
+
+  /* --- where the two meet, which is as fast as it goes --- */
+  if(p >= 1){
+    var tx = X(peak.topMph);
+    g.strokeStyle = 'rgba(238,242,247,.34)';
+    g.setLineDash([3, 3]);
+    g.beginPath(); g.moveTo(tx, y0); g.lineTo(tx, y1); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = '#eef2f7';
+    g.font = '600 11px "Barlow",Arial,sans-serif';
+    g.textAlign = tx > x1 - 86 ? 'right' : 'left';
+    g.fillText(Math.round(peak.topMph) + ' mph flat out',
+               tx + (tx > x1 - 86 ? -6 : 6), y0 + 11);
+  }
+}
+
+function dynoFigure(name, value, unit){
+  return '<div class="fig"><div class="n">' + name + '</div><div class="v">' +
+         value + (unit ? ' <small>' + unit + '</small>' : '') + '</div></div>';
+}
+
+function drawDemon(){
+  var s = statsOf(SAVE.car);
+  var peak = dynoPeak(s);
+  var r = rating(s);
+  var best = (SAVE.dyno || {})[SAVE.car];
+
+  $('demonFigs').innerHTML =
+    dynoFigure('On the badge', Math.round(peak.flywheel), 'kW') +
+    dynoFigure('Through the gears', Math.round(peak.kw), 'kW') +
+    dynoFigure('Hardest it pulls', (peak.push / 1000).toFixed(1), 'kN') +
+    dynoFigure('Top speed', Math.round(peak.topMph), 'mph') +
+    dynoFigure('0&ndash;60', peak.zeroTo60 > 60 ? '&mdash;' : peak.zeroTo60.toFixed(1), 's') +
+    dynoFigure('Boost in by',
+           peak.boost > 0 ? Math.round(peak.boostBy) : '&mdash;',
+           peak.boost > 0 ? 'mph' : 'no turbo') +
+    dynoFigure('Grip-limited to',
+           peak.slipTo > 0 ? Math.round(peak.slipTo) : '&mdash;',
+           peak.slipTo > 0 ? 'mph' : 'never') +
+    dynoFigure('Class', classOf(r), r + ' rating') +
+    dynoFigure('Best pull', best ? Math.round(best.kw) : '&mdash;', best ? 'kW' : 'not yet');
+
+  var tune = tuneFor(SAVE.car);
+  var html = '<h2 style="font-size:20px;margin-top:18px">The dials</h2>' +
+    '<p class="note2" style="margin:0">Finer than anything in the parts list, and free. ' +
+    'Each one gives with one hand and takes with the other, and the graph above ' +
+    'redraws so you can see which hand won.</p>';
+
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    var dead = dial.needs === 'boost' && !(s.boost > 0);
+    html += '<h2 style="font-size:19px;margin-top:15px">' + dial.name +
+            (dead ? ' <span class="chip">nothing to turn up</span>' : '') + '</h2>' +
+            '<p class="note2" style="margin:0 0 7px">' + dial.d + '</p>' +
+            '<div class="nav" style="justify-content:flex-start">';
+    for(var st = 0; st < dial.steps.length; st++){
+      var on = tune[dial.key] === st;
+      html += '<button class="mini" data-dial="' + dial.key + '" data-step="' + st + '"' +
+              (dead ? ' disabled style="opacity:.4"' : '') +
+              (on ? ' style="border-color:var(--red);color:var(--text);background:#241318"' : '') +
+              '>' + dial.steps[st].n + '</button>';
+    }
+    html += '</div>';
+  }
+  $('demonDials').innerHTML = html;
+
+  Array.prototype.forEach.call($('demonDials').querySelectorAll('[data-dial]'), function(b){
+    b.onclick = function(){
+      setTune(SAVE.car, b.getAttribute('data-dial'),
+              parseInt(b.getAttribute('data-step'), 10));
+      drawDemon();
+      dynoRun();
+    };
+  });
+}
 /* =========================================================================
    5  THE LOOP
 
@@ -3634,7 +4553,8 @@ function startRace(opts){
   buildTrackMesh(G.track);
   if(showcase){ scene.remove(showcase); disposeTree(showcase); showcase = null; }
 
-  var you = makeCar(SAVE.car, partsFor(SAVE.car), { name: 'You', seed: 1 });
+  var you = makeCar(SAVE.car, partsFor(SAVE.car),
+                    { name: 'You', seed: 1, tune: tuneFor(SAVE.car) });
   you.isYou = true;
   G.cars = [you];
   G.you = you;
@@ -3843,7 +4763,9 @@ function showcaseStep(dt){
 
 function drawHUD(){
   var you = G.you;
-  if(!you) return;
+  /* Both, and for the same reason drawMap checks: leaving a race nulls the
+     track, and a frame drawn in between would read the best lap off it. */
+  if(!you || !G.track) return;
 
   var mph = Math.abs(you.vf) * MPS_TO_MPH;
   $('spd').textContent = Math.round(mph);
@@ -4193,6 +5115,20 @@ function wire(){
   };
   $('btnHelp').onclick = function(){ hideAll(); show('ovHelp'); drawHelp(); };
 
+  /* Speed Demon. The strip button leaves by the same door the menu does,
+     so a car goes from the rollers to a measured quarter in one press. */
+  $('btnDemon').onclick = openDemon;
+  $('btnDemonBack').onclick = closeDemon;
+  $('btnDynoRun').onclick = dynoRun;
+  $('btnDemonBench').onclick = openBench;
+  $('btnDemonGarage').onclick = openGarage;
+  $('btnDemonStrip').onclick = function(){ demonSweep = null; startDrag(); };
+  $('btnDemonReset').onclick = function(){
+    resetTune(SAVE.car);
+    drawDemon();
+    dynoRun();
+  };
+
   $('btnGarageBack').onclick = backToMenu;
   $('btnShowBack').onclick = backToMenu;
   $('btnPaintBack').onclick = backToMenu;
@@ -4251,6 +5187,12 @@ function drawHelp(){
 
 /* Off we go. */
 init();
+
+/* ---- controller in the menus ----
+   05-padnav.js drives the menus and the garage with a pad. In a race the
+   pad is the car, so it stands aside; Start pauses and unpauses. */
+PadNav.active = function(){ return G.mode !== 'race'; };
+PadNav.onStart = function(){ togglePause(); };
 </script>
 </body>
 </html>

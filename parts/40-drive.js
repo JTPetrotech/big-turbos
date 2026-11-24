@@ -22,7 +22,7 @@ var DRAG_LEN = 402.336;       // a quarter of a mile, in metres
 
 function makeCar(carKey, parts, opts){
   opts = opts || {};
-  var stats = carStats(carKey, parts || {});
+  var stats = carStats(carKey, parts || {}, opts.tune);
   return {
     key: carKey,
     name: opts.name || CARS[carKey].name,
@@ -121,7 +121,14 @@ function stepCar(car, track, input, dt){
      sits there with its wheels turned, and without this the car pirouettes
      on the spot the moment it stops. */
   var rolling = clamp(speed / 5, 0, 1);
-  var want = car.steer * s.steer * speedEase * rolling * sign(car.vf || 1);
+  /* Negated, and this is the one that mattered: a positive rotation about Y
+     turns a body to its LEFT, and the whole world agrees with that - track
+     headings are atan2(dx, dz) and the car mesh is turned by rotation.y =
+     yaw with no correction anywhere. A steering request is the other way
+     round, positive for right, because that is what the right-hand key
+     means. Treating the two as the same number is what made the steering
+     backwards: every car turned away from the key you were holding. */
+  var want = -car.steer * s.steer * speedEase * rolling * sign(car.vf || 1);
   car.yawRate += (want - car.yawRate) * clamp(dt * 9, 0, 1);
   car.yaw += car.yawRate * dt;
 
@@ -140,7 +147,12 @@ function stepCar(car, track, input, dt){
      place the weight tiers' downside is felt, and it is deliberately felt on
      the limit rather than everywhere. */
   if(Math.abs(car.vl) > 0.9){
-    car.yaw += sign(car.vl) * (1 - s.stability) * Math.abs(car.vl) * 0.16 * dt;
+    /* Minus, for the same handedness reason. Lateral speed is positive
+       towards the car own left, which is where the velocity ends up in a
+       RIGHT turn, and a right turn is yaw going down. With a plus here the
+       term quietly did the opposite of what it says: it steadied the cars
+       it was meant to unsettle, and most of all the lightest ones. */
+    car.yaw -= sign(car.vl) * (1 - s.stability) * Math.abs(car.vl) * 0.16 * dt;
   }
 
   /* ---- into the world ---- */
@@ -347,7 +359,10 @@ function aiInput(car, track, cars){
   /* Steer towards it. */
   var wantYaw = Math.atan2(tx - car.x, tz - car.z);
   var err = angDiff(car.yaw, wantYaw);
-  var steer = clamp(err * 2.0, -1, 1);
+  /* Right-positive, like the player request, so stepCar negates both the
+     same way. The product is unchanged, which is why the field drives
+     exactly as it drove before. */
+  var steer = clamp(-err * 2.0, -1, 1);
 
   /* Pace. A skill below 1 both corners slower and hesitates on the throttle,
      so the back of the field is beatable without being stationary. */
@@ -368,7 +383,9 @@ function aiInput(car, track, cars){
     var fwd = dx * Math.sin(car.yaw) + dz * Math.cos(car.yaw);
     if(fwd < 1.2) continue;                    // alongside or behind: ignore
     var side = dx * Math.cos(car.yaw) - dz * Math.sin(car.yaw);
-    steer += (side > 0 ? -0.5 : 0.5);
+    /* side is positive when the other car sits off to this one left, so the
+       way round to pull is right, which is positive in the convention above. */
+    steer += (side > 0 ? 0.5 : -0.5);
     if(Math.abs(side) < 2.1) throttle *= 0.82;
   }
 

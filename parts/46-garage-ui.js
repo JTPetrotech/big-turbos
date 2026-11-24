@@ -53,12 +53,12 @@ var BARS = [
   { key: 'mass', name: 'Weight', lo: 1750, hi: 600, fmt: function(s){ return Math.round(s.mass) + ' kg'; } },
   { key: 'grip', name: 'Grip', lo: 0.85, hi: 2.0, fmt: function(s){ return gripAt(s, 30).toFixed(2) + 'g'; } },
   { key: 'brake', name: 'Brakes', lo: 8, hi: 17, fmt: function(s){ return s.brake.toFixed(1); } },
-  { key: 'top', name: 'Top speed', lo: 85, hi: 215, fmt: function(s){ return Math.round(topSpeed(s) * MPS_TO_MPH) + ' mph'; } },
+  { key: 'top', name: 'Top speed', lo: 85, hi: 215, fmt: function(s){ return Math.round(flatOut(s) * MPS_TO_MPH) + ' mph'; } },
   { key: 'sixty', name: '0-60', lo: 11, hi: 2, fmt: function(s){ var z = zeroTo60(s); return z > 50 ? '--' : z.toFixed(1) + 's'; } }
 ];
 
 function barValue(key, s){
-  if(key === 'top') return topSpeed(s) * MPS_TO_MPH;
+  if(key === 'top') return flatOut(s) * MPS_TO_MPH;
   if(key === 'sixty') return zeroTo60(s);
   if(key === 'grip') return gripAt(s, 30);
   return s[key];
@@ -298,7 +298,7 @@ function drawShowroom(){
             '<div class="d">' + car.desc + '</div>' +
             '<div style="margin-top:6px">' +
             '<span class="chip cls">Class ' + classOf(r) + '</span>' +
-            '<span class="chip">' + Math.round(topSpeed(s) * MPS_TO_MPH) + ' mph</span>' +
+            '<span class="chip">' + Math.round(flatOut(s) * MPS_TO_MPH) + ' mph</span>' +
             '<span class="chip">0-60 ' + zeroTo60(s).toFixed(1) + 's</span>' +
             '<span class="chip">' + Math.round(s.mass) + ' kg</span>' +
             '</div></div>' + right + '</div>';
@@ -751,4 +751,250 @@ function renderWager(ev){
     : 'Win and you take <b style="color:var(--green)">' +
       money(Math.round(wagerStake * odds)) + '</b> on top. Finish anywhere else and ' +
       'the <b style="color:var(--red)">' + money(wagerStake) + '</b> is gone.';
+}
+
+/* ------------------------------------------------------- the Speed Demon -- */
+
+/* The workshop screen: a rolling road with the dials underneath it, so a
+   change and its consequence are on the same page. Everything drawn here is
+   produced by dynoPull and dynoPeak, which are the driving model's own sums -
+   there is no second idea of how much power this car makes. */
+
+var demonSweep = null;        // timestamp of the pull currently being drawn
+
+function openDemon(){
+  hideAll();
+  show('ovDemon');
+  drawDemon();
+  dynoRun();
+}
+
+function closeDemon(){
+  demonSweep = null;
+  backToMenu();
+}
+
+function tick(){
+  return (typeof performance !== 'undefined' && performance.now)
+    ? performance.now() : Date.now();
+}
+
+/* A pull sweeps across rather than appearing, because that is what watching
+   one is like, and because it makes a changed dial obvious. */
+function dynoRun(){
+  var started = tick();
+  demonSweep = started;
+  function frame(){
+    if(demonSweep !== started) return;        // a newer pull took this over
+    var p = clamp((tick() - started) / 620, 0, 1);
+    drawDyno(p);
+    if(p < 1){ requestAnimationFrame(frame); return; }
+    demonSweep = null;
+    var peak = dynoPeak(statsOf(SAVE.car));
+    var beat = logDyno(SAVE.car, peak);
+    var best = (SAVE.dyno || {})[SAVE.car];
+    /* The figures were drawn before the pull finished, so the best-pull
+       one is a run out of date by the time there is a best pull. */
+    if(beat) drawDemon();
+    $('demonNote').textContent = beat
+      ? 'Best pull yet for the ' + CARS[SAVE.car].name + ': ' +
+        Math.round(peak.kw) + ' kW at the wheels.'
+      : 'Best this car has put down: ' + Math.round(best.kw) + ' kW at ' +
+        Math.round(best.mph) + ' mph.';
+  }
+  requestAnimationFrame(frame);
+}
+
+/* The graph is thrust against road speed, not power against rpm, and the
+   comment on dynoPull says why. Two lines: what the wheels can push, and
+   what the air and the tyres take back. The gap between them is the only
+   thing that makes a car accelerate, so it is shaded in - when it closes,
+   you have arrived at your top speed, and you can see it coming. */
+function drawDyno(p){
+  var cv = $('dynoChart');
+  if(!cv) return;
+  var g = cv.getContext('2d');
+  var w = Math.max(cv.clientWidth || 0, 280), h = 300;
+  var dpr = window.devicePixelRatio || 1;
+  if(cv.width !== Math.round(w * dpr)){
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+  }
+  cv.style.height = h + 'px';
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  var s = statsOf(SAVE.car);
+  var peak = dynoPeak(s);
+  var pull = peak.pull;
+  /* The untouched car, faintly, whenever the dials have been moved: the
+     point of a dial is the difference it makes, and a difference needs the
+     thing it is different from. */
+  var stock = isTuned(tuneFor(SAVE.car))
+    ? dynoPull(carStats(SAVE.car, partsFor(SAVE.car), neutralTune())) : null;
+
+  var x0 = 48, x1 = w - 12, y0 = 14, y1 = h - 28;
+  var maxMph = Math.max(peak.topMph, 60) * 1.08;
+  var maxN = 10;
+  for(var i = 0; i < pull.length; i++) maxN = Math.max(maxN, pull[i].push, pull[i].hold);
+  if(stock) for(var j = 0; j < stock.length; j++) maxN = Math.max(maxN, stock[j].push);
+  maxN *= 1.1;
+  function X(m){ return x0 + (x1 - x0) * clamp(m / maxMph, 0, 1); }
+  function Y(n){ return y1 - (y1 - y0) * clamp(n / maxN, 0, 1); }
+
+  /* --- grid and labels --- */
+  g.font = '10px "Barlow",Arial,sans-serif';
+  g.lineWidth = 1;
+  var mphStep = maxMph > 220 ? 50 : 25;
+  for(var m = 0; m <= maxMph; m += mphStep){
+    var gx = Math.round(X(m)) + 0.5;
+    g.strokeStyle = '#1b2029';
+    g.beginPath(); g.moveTo(gx, y0); g.lineTo(gx, y1); g.stroke();
+    g.fillStyle = '#5c6677';
+    g.textAlign = 'center';
+    g.fillText(String(m), gx, y1 + 14);
+  }
+  var nStep = maxN > 14000 ? 5000 : (maxN > 6000 ? 2000 : 1000);
+  for(var n = 0; n <= maxN; n += nStep){
+    var gy = Math.round(Y(n)) + 0.5;
+    g.strokeStyle = '#1b2029';
+    g.beginPath(); g.moveTo(x0, gy); g.lineTo(x1, gy); g.stroke();
+    g.fillStyle = '#5c6677';
+    g.textAlign = 'right';
+    g.fillText(n >= 1000 ? (n / 1000) + 'k' : String(n), x0 - 6, gy + 3);
+  }
+  g.fillStyle = '#5c6677';
+  g.textAlign = 'left';
+  g.fillText('newtons at the wheels', x0 + 3, y0 + 9);
+  g.textAlign = 'right';
+  g.fillText('mph', x1, y1 + 14);
+
+  /* --- where the turbo is still asleep --- */
+  if(peak.boost > 0 && peak.boostBy > 0){
+    g.fillStyle = 'rgba(74,158,255,.06)';
+    g.fillRect(X(0), y0, X(peak.boostFrom) - X(0), y1 - y0);
+    g.fillStyle = 'rgba(74,158,255,.11)';
+    g.fillRect(X(peak.boostFrom), y0, X(peak.boostBy) - X(peak.boostFrom), y1 - y0);
+  }
+
+  var cut = Math.max(2, Math.ceil(pull.length * p));
+
+  /* --- the gap, which is the acceleration --- */
+  g.beginPath();
+  var opened = false, last = 0;
+  for(var a = 0; a < Math.min(cut, pull.length); a++){
+    if(pull[a].push <= pull[a].hold) break;
+    if(!opened){ g.moveTo(X(pull[a].mph), Y(pull[a].push)); opened = true; }
+    else g.lineTo(X(pull[a].mph), Y(pull[a].push));
+    last = a;
+  }
+  if(opened){
+    for(var b = last; b >= 0; b--) g.lineTo(X(pull[b].mph), Y(pull[b].hold));
+    g.closePath();
+    g.fillStyle = 'rgba(255,59,48,.10)';
+    g.fill();
+  }
+
+  function line(samples, pick, colour, width, dashed){
+    g.beginPath();
+    for(var i2 = 0; i2 < Math.min(cut, samples.length); i2++){
+      var sx = X(samples[i2].mph), sy = Y(pick(samples[i2]));
+      if(i2 === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy);
+    }
+    g.strokeStyle = colour;
+    g.lineWidth = width;
+    g.setLineDash(dashed ? [4, 4] : []);
+    g.stroke();
+    g.setLineDash([]);
+  }
+
+  if(stock) line(stock, function(d){ return d.push; }, 'rgba(238,242,247,.3)', 1.6, true);
+  line(pull, function(d){ return d.hold; }, '#4a9eff', 1.8, false);
+
+  /* The thrust line is drawn in two colours: where the engine is the limit,
+     and where the tyres are. A car that is amber a long way up the graph is
+     not short of power, it is short of grip, and no amount of turbo will fix
+     that. The distinction is most of what a rolling road is for. */
+  for(var i3 = 1; i3 < Math.min(cut, pull.length); i3++){
+    g.beginPath();
+    g.moveTo(X(pull[i3 - 1].mph), Y(pull[i3 - 1].push));
+    g.lineTo(X(pull[i3].mph), Y(pull[i3].push));
+    g.strokeStyle = pull[i3].slip ? '#ffd166' : '#ff3b30';
+    g.lineWidth = 2.6;
+    g.stroke();
+  }
+
+  /* --- where the two meet, which is as fast as it goes --- */
+  if(p >= 1){
+    var tx = X(peak.topMph);
+    g.strokeStyle = 'rgba(238,242,247,.34)';
+    g.setLineDash([3, 3]);
+    g.beginPath(); g.moveTo(tx, y0); g.lineTo(tx, y1); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = '#eef2f7';
+    g.font = '600 11px "Barlow",Arial,sans-serif';
+    g.textAlign = tx > x1 - 86 ? 'right' : 'left';
+    g.fillText(Math.round(peak.topMph) + ' mph flat out',
+               tx + (tx > x1 - 86 ? -6 : 6), y0 + 11);
+  }
+}
+
+function dynoFigure(name, value, unit){
+  return '<div class="fig"><div class="n">' + name + '</div><div class="v">' +
+         value + (unit ? ' <small>' + unit + '</small>' : '') + '</div></div>';
+}
+
+function drawDemon(){
+  var s = statsOf(SAVE.car);
+  var peak = dynoPeak(s);
+  var r = rating(s);
+  var best = (SAVE.dyno || {})[SAVE.car];
+
+  $('demonFigs').innerHTML =
+    dynoFigure('On the badge', Math.round(peak.flywheel), 'kW') +
+    dynoFigure('Through the gears', Math.round(peak.kw), 'kW') +
+    dynoFigure('Hardest it pulls', (peak.push / 1000).toFixed(1), 'kN') +
+    dynoFigure('Top speed', Math.round(peak.topMph), 'mph') +
+    dynoFigure('0&ndash;60', peak.zeroTo60 > 60 ? '&mdash;' : peak.zeroTo60.toFixed(1), 's') +
+    dynoFigure('Boost in by',
+           peak.boost > 0 ? Math.round(peak.boostBy) : '&mdash;',
+           peak.boost > 0 ? 'mph' : 'no turbo') +
+    dynoFigure('Grip-limited to',
+           peak.slipTo > 0 ? Math.round(peak.slipTo) : '&mdash;',
+           peak.slipTo > 0 ? 'mph' : 'never') +
+    dynoFigure('Class', classOf(r), r + ' rating') +
+    dynoFigure('Best pull', best ? Math.round(best.kw) : '&mdash;', best ? 'kW' : 'not yet');
+
+  var tune = tuneFor(SAVE.car);
+  var html = '<h2 style="font-size:20px;margin-top:18px">The dials</h2>' +
+    '<p class="note2" style="margin:0">Finer than anything in the parts list, and free. ' +
+    'Each one gives with one hand and takes with the other, and the graph above ' +
+    'redraws so you can see which hand won.</p>';
+
+  for(var i = 0; i < TUNE_DIALS.length; i++){
+    var dial = TUNE_DIALS[i];
+    var dead = dial.needs === 'boost' && !(s.boost > 0);
+    html += '<h2 style="font-size:19px;margin-top:15px">' + dial.name +
+            (dead ? ' <span class="chip">nothing to turn up</span>' : '') + '</h2>' +
+            '<p class="note2" style="margin:0 0 7px">' + dial.d + '</p>' +
+            '<div class="nav" style="justify-content:flex-start">';
+    for(var st = 0; st < dial.steps.length; st++){
+      var on = tune[dial.key] === st;
+      html += '<button class="mini" data-dial="' + dial.key + '" data-step="' + st + '"' +
+              (dead ? ' disabled style="opacity:.4"' : '') +
+              (on ? ' style="border-color:var(--red);color:var(--text);background:#241318"' : '') +
+              '>' + dial.steps[st].n + '</button>';
+    }
+    html += '</div>';
+  }
+  $('demonDials').innerHTML = html;
+
+  Array.prototype.forEach.call($('demonDials').querySelectorAll('[data-dial]'), function(b){
+    b.onclick = function(){
+      setTune(SAVE.car, b.getAttribute('data-dial'),
+              parseInt(b.getAttribute('data-step'), 10));
+      drawDemon();
+      dynoRun();
+    };
+  });
 }
