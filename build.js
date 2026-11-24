@@ -13,13 +13,15 @@ const path = require('path');
 const DIR = __dirname;
 const PARTS = [
   '00-head.html',
+  '05-padnav.js',
   '10-core.js',
   '20-track.js',
   '30-cars.js',
   '40-drive.js',
   '45-garage.js',
   '46-garage-ui.js',
-  '50-loop.js'
+  '50-loop.js',
+  '55-pad-menus.js'
 ];
 const THREE_FILE = path.join(DIR, 'vendor', 'three.r128.min.js');
 const FONT_INLINE = path.join(DIR, 'vendor', 'fonts-inline.css');
