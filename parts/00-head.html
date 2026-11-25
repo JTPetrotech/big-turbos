@@ -226,6 +226,19 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
   border:1px solid var(--line);color:var(--muted);margin-right:4px}
 .chip.cls{color:var(--amber);border-color:#3a3320}
 
+/* the volume slider */
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px;
+  background:transparent;margin-top:10px;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;
+  background:var(--panel2);border:1px solid var(--line)}
+input[type=range]::-moz-range-track{height:8px;border-radius:999px;
+  background:var(--panel2);border:1px solid var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:22px;height:22px;margin-top:-8px;border-radius:50%;background:var(--red);
+  border:2px solid #16181d}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border:2px solid #16181d;
+  border-radius:50%;background:var(--red)}
+
 /* swatches */
 .swatches{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .sw{width:34px;height:34px;border-radius:9px;border:2px solid var(--line);cursor:pointer}
@@ -254,6 +267,59 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 #ovMenu,#ovPaint{background:rgba(5,6,9,.42);backdrop-filter:blur(2px)}
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:50}
 #loading div{font-family:var(--display);font-size:46px;color:var(--red);letter-spacing:.06em}
+
+/* ---------------------------------------------------------- polish ------
+   Layered over the rules above: the overlays become a pit-lane glow with
+   speed lines running behind the card, the title gets a chrome-and-neon
+   treatment, and the buttons light up like a dash when you land on them. */
+.ov{background:
+  radial-gradient(60% 45% at 50% 0%, rgba(255,59,48,.22), transparent 70%),
+  radial-gradient(70% 60% at 50% 100%, rgba(74,158,255,.12), transparent 70%),
+  rgba(5,6,9,.88)}
+.ov::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.45;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 140px, rgba(255,59,48,.18) 140px 220px, transparent 220px 420px),
+    repeating-linear-gradient(90deg, transparent 0 90px, rgba(255,255,255,.07) 90px 130px, transparent 130px 300px);
+  background-size:420px 2px,300px 1px;background-repeat:repeat-x;
+  background-position:0 30%,0 72%;
+  animation:btStreak 1.6s linear infinite}
+@keyframes btStreak{to{background-position:-420px 30%,-300px 72%}}
+.card{position:relative;border-color:rgba(255,255,255,.1);
+  box-shadow:0 30px 80px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,59,48,.08),inset 0 1px 0 rgba(255,255,255,.06)}
+.card::before{content:"";position:absolute;left:16%;right:16%;top:-1px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--red),#ffb3ad,var(--red),transparent)}
+.ov.on .card{animation:btRise .4s cubic-bezier(.2,.8,.2,1) both}
+@keyframes btRise{from{opacity:0;transform:translateY(16px) scale(.985)}}
+
+h1{background:linear-gradient(180deg,#ffffff 0%,#dfe4ec 48%,#8b93a1 52%,#e6eaf0 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 0 rgba(0,0,0,.45))}
+h1 em{background:none;-webkit-text-fill-color:var(--red);color:var(--red);
+  text-shadow:0 0 10px rgba(255,59,48,.7),0 0 34px rgba(255,59,48,.45)}
+#wallet b{text-shadow:0 0 16px rgba(255,209,102,.55)}
+
+.go{position:relative;overflow:hidden;
+  background:linear-gradient(180deg,#ff5a4f,#e2261b);
+  box-shadow:0 4px 0 #8f1610,0 14px 30px -12px rgba(255,59,48,.8);
+  transition:filter .12s,transform .12s,box-shadow .12s}
+.go::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);
+  transform:skewX(-18deg);transition:left .45s ease}
+.go:hover::after,.go.pn-focus::after{left:120%}
+.go:hover,.go.pn-focus{transform:translateY(-2px);box-shadow:0 6px 0 #8f1610,0 18px 36px -12px rgba(255,59,48,.9)}
+.go:active{transform:translateY(2px)}
+.go.alt{background:linear-gradient(180deg,#232836,#191d27);border-color:#2f3646;
+  box-shadow:0 4px 0 #0b0d12,0 12px 24px -14px rgba(0,0,0,.9)}
+.go.alt:hover,.go.alt.pn-focus{border-color:var(--red);
+  box-shadow:0 6px 0 #0b0d12,0 16px 32px -14px rgba(255,59,48,.65),inset 0 0 0 1px rgba(255,59,48,.35)}
+.go.gr{background:linear-gradient(180deg,#58dca0,#2fb578);box-shadow:0 4px 0 #1a6c47,0 12px 26px -12px rgba(62,201,138,.8)}
+
+.mini{border-radius:999px;background:linear-gradient(180deg,#1f2430,#171b24);
+  transition:transform .14s,border-color .14s,box-shadow .14s,color .14s}
+.mini:hover,.mini.pn-focus{transform:translateY(-2px);border-color:var(--red);
+  box-shadow:0 8px 18px -8px rgba(255,59,48,.7)}
+
+@media (prefers-reduced-motion:reduce){.ov::before,.ov.on .card{animation:none}.go::after{display:none}}
 </style>
 </head>
 <body>
@@ -309,6 +375,7 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
       <button class="mini" id="btnPaint">Paint</button>
       <button class="mini" id="btnBench">Workbench</button>
       <button class="mini" id="btnHelp">Controls</button>
+      <button class="mini" id="btnSound">Sound</button>
       <!-- A real link, not a scripted button: the way out of the game still
            works even if the script above it never runs. -->
       <a class="mini" id="lnkArcade" href="https://jtpetrotech.github.io/">The Arcade</a>
@@ -332,6 +399,25 @@ h2{font-family:var(--display);font-size:32px;letter-spacing:.03em;margin:0 0 3px
 </div>
 
 <!-- showroom: buying cars -->
+<!-- sound -->
+<div class="ov" id="ovSound">
+  <div class="card">
+    <h2>Sound</h2>
+    <p class="sub">Every noise in here is made up on the spot out of oscillators
+      and filtered noise - there is not a single sound file in the game, which
+      is how it still opens off a memory stick with nothing to download.</p>
+    <div class="row" id="rowSoundOn">
+      <div class="grow"><div class="t">Engine note</div>
+        <div class="d">The engine, the turbo, the tyres and the wind.</div></div>
+      <span class="cost have" id="vSoundOn">On</span>
+    </div>
+    <h2 style="font-size:22px;margin-top:16px">How loud</h2>
+    <input type="range" id="volSlider" min="0" max="100" step="1" value="70">
+    <p class="note2" id="soundNote"></p>
+    <div class="btns"><button class="go alt" id="btnSoundBack">Back</button></div>
+  </div>
+</div>
+
 <div class="ov" id="ovShow">
   <div class="card wide">
     <h2>Showroom</h2>
