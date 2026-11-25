@@ -815,11 +815,18 @@ function buildCar(carKey, looks, lift){
 
 /* Spin the wheels and turn the front pair. Called every frame per car, so it
    stays arithmetic and touches nothing it does not have to. */
-function animateCar(obj, speed, steer, dt, roll, pitch){
+function animateCar(obj, speed, steer, dt, roll, pitch, hand){
   var u = obj.userData;
   if(!u || !u.wheels) return;
   var spin = (speed * dt) / 0.33;
-  for(var i = 0; i < u.wheels.length; i++) u.wheels[i].rotation.x -= spin;
+  for(var i = 0; i < u.wheels.length; i++){
+    /* The back two stop turning when the handbrake locks them, which is
+       the whole of what a handbrake looks like from outside the car. They
+       are the last two because that is the order buildCar adds them in:
+       front pair, then rear pair. */
+    var locked = hand && i >= 2;
+    u.wheels[i].rotation.x -= locked ? 0 : spin;
+  }
   /* Negated, because rotation.y turns a wheel to its left and the steer this
      is handed is positive for right. The front wheels used to point the way
      the car was not going, which is a quiet confirmation of the same slip. */

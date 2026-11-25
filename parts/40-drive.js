@@ -36,6 +36,7 @@ function makeCar(carKey, parts, opts){
 
     lap: 0, along: 0, lastAlong: 0, hint: null, progress: 0,
     lateral: 0, off: false,
+    handOn: false,                 // the lever is up
     accF: 0, accL: 0,              // what the body is being asked to do
     roll: 0, pitch: 0,             // and how far it has leaned about it
     nosLeft: stats.nosTime, nosOn: false,
@@ -75,7 +76,17 @@ function stepCar(car, track, input, dt){
      all-terrain tyre is worse than a semi-slick on tarmac and better than
      anything here on grass, which is the whole trade a lift kit sells. */
   if(car.off) grip *= OFF_GRIP + (1 - OFF_GRIP) * (s.offroad || 0);
-  if(hand) grip *= 0.42;               // handbrake: deliberately break traction
+  /* The handbrake. It locks the back wheels, and all three things that
+     follow from that have to happen or the car does not behave like a car
+     with its handbrake on.
+
+     What was here before was one of them and the wrong one: grip *= 0.42,
+     applied to the whole car. A car with less grip at BOTH ends does not
+     pivot, it ploughs - you got understeer and a longer stopping distance,
+     which is the opposite of what the lever is for. The point of a
+     handbrake is that the back lets go while the front still bites. */
+  var handOn = !!hand;
+  if(handOn) grip *= 0.34;
   var gripForce = grip * s.mass * GRAV;
 
   /* ---- nitrous ---- */
@@ -101,6 +112,10 @@ function stepCar(car, track, input, dt){
     if(car.vf > 0.4) af -= s.brake * brake;
     else af -= s.brake * brake * 0.55;      // held on, it reverses out
   }
+  /* Two locked wheels with no servo behind them: real retardation, but
+     well under what the brake pedal does with four. Signed, so it slows a
+     car reversing out of a spin as well as one going forwards. */
+  if(handOn && speed > 0.4) af -= s.brake * 0.34 * sign(car.vf);
   if(car.off){
     /* Resistance, not a wall. At racing speed the full penalty applies,
        which is what stops the grass being a shortcut; but held constant it
@@ -113,6 +128,10 @@ function stepCar(car, track, input, dt){
 
   car.vf += af * dt;
   if(Math.abs(car.vf) < 0.05 && throttle === 0) car.vf = 0;
+  /* A handbrake holds a stopped car stopped. Off the throttle only - hold
+     both and you get a burnout, which is correct and is also the only way
+     to leave the line on the strip with the lever up. */
+  if(handOn && throttle === 0 && Math.abs(car.vf) < 0.8) car.vf = 0;
   car.vf = clamp(car.vf, -12, car.vMax * 1.02);
 
   /* ---- yaw ---- */
@@ -148,13 +167,28 @@ function stepCar(car, track, input, dt){
      sliding: less inertia to stop the back coming round. This is the one
      place the weight tiers' downside is felt, and it is deliberately felt on
      the limit rather than everywhere. */
+  /* A locked rear axle has no cornering ability at all, so however planted
+     the car is normally, with the lever up the back is loose. This is the
+     term that actually rotates a sliding car, and it is scaled by
+     1 - stability - which for a well sorted car is nearly nothing. That is
+     why pulling the handbrake in one of those used to do nothing you could
+     see: the grip went away, the car slid wide, and it never came round.
+
+     Scaled rather than capped, and that distinction has a test behind it:
+     Math.min(stability, 0.4) was the first thing written here, and it
+     flattened every car in the game to exactly the same looseness the
+     moment the lever came up - so a stripped shell and a standard car
+     came round identically, which the weight-tier test noticed and said
+     so. Multiplying keeps the order: the car that was already a handful
+     is still the bigger handful. */
+  var loose = handOn ? s.stability * 0.45 : s.stability;
   if(Math.abs(car.vl) > 0.9){
     /* Minus, for the same handedness reason. Lateral speed is positive
        towards the car own left, which is where the velocity ends up in a
        RIGHT turn, and a right turn is yaw going down. With a plus here the
        term quietly did the opposite of what it says: it steadied the cars
        it was meant to unsettle, and most of all the lightest ones. */
-    car.yaw -= sign(car.vl) * (1 - s.stability) * Math.abs(car.vl) * 0.16 * dt;
+    car.yaw -= sign(car.vl) * (1 - loose) * Math.abs(car.vl) * 0.16 * dt;
   }
 
   /* ---- what the body does about all of that ---- */
@@ -176,6 +210,9 @@ function stepCar(car, track, input, dt){
      the left a few lines above - and a positive roll about Z lifts +x. So
      a right-hand corner gives a negative roll, which drops the left side,
      which is the outside of the turn. Which is what a car does. */
+  /* Kept on the car so the wheels can stop turning and the tyres can
+     scrub without either of them needing the input object. */
+  car.handOn = handOn;
   car.accF = af;
   /* The sideways acceleration is the tyre force that killed the slip a few
      lines up, not vf * yawRate - which is the same thing only while the car
@@ -285,6 +322,7 @@ function stageDrag(cars, track){
     car.yaw = p.dir;
     car.vf = 0; car.vl = 0; car.yawRate = 0; car.steer = 0;
     car.roll = 0; car.pitch = 0; car.accF = 0; car.accL = 0;
+    car.handOn = false;
     car.lap = 0; car.hint = 0;
     car.along = 0; car.lastAlong = 0; car.progress = 0; car.lateral = side;
     car.finished = false; car.finishTime = null;
@@ -477,6 +515,7 @@ function gridUp(cars, track){
     car.yaw = p.dir;
     car.vf = 0; car.vl = 0; car.yawRate = 0; car.steer = 0;
     car.roll = 0; car.pitch = 0; car.accF = 0; car.accL = 0;
+    car.handOn = false;
     car.lap = 0; car.hint = idx;
     car.along = along; car.lastAlong = along;
     car.progress = along - track.total;        // negative until the line

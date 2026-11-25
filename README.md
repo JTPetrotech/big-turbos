@@ -328,6 +328,29 @@ Units are real: metres, seconds, kilograms, newtons. The stock hatch does
 0–60 in 8.8s and tops out at 98 mph, because 92 kW pushing 1,046 kg is what
 that does.
 
+**The handbrake** locks the back wheels, and all three things that follow
+from that have to happen or it is not a handbrake. It was in the game from
+the start as `grip *= 0.42` applied to the whole car, which is less grip at
+both ends - and a car with less grip at both ends ploughs rather than
+pivots. You got understeer and a longer stopping distance, which is the
+opposite of what the lever is for.
+
+Now: the lateral grip goes, two locked wheels drag the car down at about a
+third of what the brake pedal manages with four, and the rotation term is
+scaled so the back is loose however planted the car normally is. That last
+one is the one that was missing. The term that rotates a sliding car is
+scaled by `1 - stability`, which for a sorted car is nearly nothing, so
+pulling the lever in a Skyline took the grip away and the car slid wide
+without ever coming round. The same corner that gave 88 degrees of rotation
+now gives 150, and the Skyline 92 becomes 161.
+
+Scaled, incidentally, and not capped: `Math.min(stability, 0.4)` was written
+here first and flattened every car in the game to identical looseness the
+moment the lever came up, which the weight-tier test noticed immediately.
+The back two wheels stop turning while the front two carry on, and the
+tyres scrub whether or not you are sliding sideways, because locked wheels
+do.
+
 ## Controls
 
 | | |

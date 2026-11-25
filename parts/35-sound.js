@@ -382,6 +382,7 @@ function engineVoice(car, input){
     boost: boost,
     blown: blown,
     slip: slip,
+    hand: !!car.handOn,
     speed: speed,
     off: !!car.off,
     nos: !!car.nosOn,
@@ -408,9 +409,13 @@ function voiceLevels(v){
     turbo: v.boost * 0.055,
     turboAt: 1100 + v.boost * 2600 + v.within * 1800,
     blower: v.blown ? (0.012 + v.load * 0.05) : 0,
+    /* Locked wheels scrub whether or not they are sliding sideways, so the
+       handbrake has to put noise in on its own account - pull it going
+       straight and the slip term alone would give you silence. */
     tyre: clamp((v.slip - 0.06) * 1.5, 0, 1) * 0.1 +
-          (v.off && v.speed > 4 ? 0.05 : 0),
-    tyreAt: v.off ? 700 : 1300 + v.slip * 900,
+          (v.off && v.speed > 4 ? 0.05 : 0) +
+          (v.hand && v.speed > 2 ? clamp(v.speed / 18, 0, 1) * 0.075 : 0),
+    tyreAt: v.off ? 700 : (v.hand ? 950 : 1300) + v.slip * 900,
     wind: clamp(v.speed / 75, 0, 1) * clamp(v.speed / 75, 0, 1) * 0.14,
     windAt: 300 + v.speed * 9,
     nos: v.nos ? 0.07 : 0

@@ -350,7 +350,7 @@ function raceStep(dt){
     if(!c.obj) continue;
     c.obj.position.set(c.x, 0, c.z);
     c.obj.rotation.y = c.yaw;
-    animateCar(c.obj, c.vf, c.steer, dt, c.roll, c.pitch);
+    animateCar(c.obj, c.vf, c.steer, dt, c.roll, c.pitch, c.handOn);
   }
 
   /* Only your own car makes a noise. Four more engines mixed down by
@@ -878,10 +878,15 @@ function drawHelp(){
     'S or Down — brake, then reverse<br>' +
     'A / D or Left / Right — steer<br>' +
     'Space — handbrake<br>' +
+    'Shift or N — nitrous, if the car has a bottle<br>' +
     'P or Esc — pause, R — restart</p>' +
+    '<p style="color:var(--muted)">The handbrake locks the back wheels. Turn in, ' +
+    'pull it, and the back comes round - a planted car as readily as a loose ' +
+    'one, because a locked axle has no grip to be planted with. It slows you ' +
+    'down as well, and it holds the car still once you are stopped.</p>' +
     '<p><b>Gamepad</b><br>Triggers for throttle and brake, left stick to steer, ' +
     'B for the handbrake. Press a button first — browsers hide a pad until you do.</p>' +
-    '<p><b>Phone</b><br>Arrows bottom left, GO and BRAKE bottom right.</p>' +
+    '<p><b>Phone</b><br>Arrows bottom left, GO and BRAKE bottom right, HAND between them.</p>' +
     '<p style="color:var(--muted);margin-top:14px">Everything here is earned by driving. ' +
     'There is nothing to buy with real money, and there never will be.</p>';
 }

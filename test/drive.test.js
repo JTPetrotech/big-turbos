@@ -823,4 +823,101 @@ H.ok(dive > 0, 'and on the brakes it goes down', (dive * 57.3).toFixed(2) + ' de
 H.ok(dive > Math.abs(squat), 'further than it ever squats, which is how cars are',
      (Math.abs(squat) * 57.3).toFixed(2) + ' up against ' + (dive * 57.3).toFixed(2) + ' down');
 
+/* ------------------------------------------------------------ the lever -- */
+/* A handbrake was in here from the start as grip *= 0.42 applied to the
+   whole car, and that is not a handbrake - it is less grip at both ends,
+   which makes a car plough rather than pivot. These are the three things
+   the lever actually has to do, and the first one is the whole point:
+   the BACK lets go while the front still bites. */
+
+console.log('\n  the lever');
+
+const pull = (hand, steer, seconds, carKey) => {
+  const c = ctx.makeCar(carKey || 'coupe', {});
+  ctx.stageDrag([c], open);
+  const straight = { throttle: 1, brake: 0, steer: 0, hand: false };
+  for(let t = 0; t < 3; t += DT) ctx.stepCar(c, open, straight, DT);
+  const yaw0 = c.yaw, v0 = c.vf;
+  const held = { throttle: 0, brake: 0, steer: steer, hand: hand };
+  for(let t = 0; t < seconds; t += DT) ctx.stepCar(c, open, held, DT);
+  return {
+    turned: Math.abs(ctx.angDiff(yaw0, c.yaw)),
+    slowedBy: v0 - c.vf,
+    speed: c.vf,
+    handOn: c.handOn
+  };
+};
+
+const free = pull(false, 0.8, 1.2);
+const yanked = pull(true, 0.8, 1.2);
+
+H.ok(yanked.handOn === true && free.handOn === false,
+     'the car knows whether the lever is up');
+H.ok(yanked.turned > free.turned * 1.25,
+     'pulling it round a corner brings the back round further than not',
+     (free.turned * 57.3).toFixed(0) + ' degrees becomes ' + (yanked.turned * 57.3).toFixed(0));
+H.ok(yanked.slowedBy > free.slowedBy * 1.2,
+     'and it slows the car as well, because two wheels are locked',
+     free.slowedBy.toFixed(1) + ' m/s becomes ' + yanked.slowedBy.toFixed(1));
+
+/* It has to work in a car that is otherwise completely planted. This is
+   the one that the old version failed: the rotation term is scaled by
+   1 - stability, which for a sorted car is nearly nothing, so the lever
+   took the grip away and the car just slid wide without ever coming
+   round. */
+const planted = ctx.makeCar('gtr', {});
+H.ok(planted.stats.stability > 0.93, 'the Skyline is a planted car to begin with',
+     'stability ' + planted.stats.stability.toFixed(2));
+const plantedFree = pull(false, 0.8, 1.2, 'gtr');
+const plantedYank = pull(true, 0.8, 1.2, 'gtr');
+H.ok(plantedYank.turned > plantedFree.turned * 1.25,
+     'and the lever still breaks even that car loose',
+     (plantedFree.turned * 57.3).toFixed(0) + ' degrees becomes ' +
+     (plantedYank.turned * 57.3).toFixed(0));
+
+/* Straight line, no steering: it is a brake, not a magic spin button. */
+const straightPull = pull(true, 0, 1.0);
+H.ok(straightPull.turned * 57.3 < 8,
+     'pulled in a straight line it does not spin the car on its own',
+     (straightPull.turned * 57.3).toFixed(1) + ' degrees');
+
+/* And it holds. Roll to a stop with the lever up and stay stopped. */
+const held = ctx.makeCar('coupe', {});
+ctx.stageDrag([held], open);
+for(let t = 0; t < 2; t += DT) ctx.stepCar(held, open, { throttle: 1, brake: 0, steer: 0, hand: false }, DT);
+for(let t = 0; t < 6; t += DT) ctx.stepCar(held, open, { throttle: 0, brake: 0, steer: 0, hand: true }, DT);
+H.ok(Math.abs(held.vf) < 0.01, 'left on, it brings the car to a stop and holds it there',
+     held.vf.toFixed(3) + ' m/s');
+const parkedAt = held.along;
+for(let t = 0; t < 4; t += DT) ctx.stepCar(held, open, { throttle: 0, brake: 0, steer: 0, hand: true }, DT);
+H.ok(Math.abs(held.along - parkedAt) < 0.05, 'and it does not creep',
+     Math.abs(held.along - parkedAt).toFixed(3) + ' m in four seconds');
+
+/* But the throttle still beats it, which is what a burnout is and is the
+   only way off the line on the strip with the lever up. */
+for(let t = 0; t < 2; t += DT) ctx.stepCar(held, open, { throttle: 1, brake: 0, steer: 0, hand: true }, DT);
+H.ok(held.vf > 0.5, 'while the throttle still drags the car off the line against it',
+     held.vf.toFixed(1) + ' m/s');
+
+/* No free lunch: it can never make a car quicker anywhere. */
+const lap = (hand) => {
+  const c = ctx.makeCar('coupe', {});
+  ctx.stageDrag([c], open);
+  let t = 0;
+  while(c.along < 300 && t < 60){
+    ctx.stepCar(c, open, { throttle: 1, brake: 0, steer: 0, hand: hand }, DT);
+    t += DT;
+  }
+  return t;
+};
+H.ok(lap(true) > lap(false),
+     'and dragging it down a straight is slower, never quicker',
+     lap(false).toFixed(2) + 's becomes ' + lap(true).toFixed(2) + 's');
+
+/* The back wheels stop turning, which is the whole of what it looks like
+   from outside. animateCar is three.js and will not run in here, so the
+   sign is read out of the source the way the steering one is. */
+H.ok(/var locked = hand && i >= 2;/.test(cars30),
+     'and the locked wheels are the back two, not the front two');
+
 H.done();
