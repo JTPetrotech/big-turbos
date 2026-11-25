@@ -18,6 +18,7 @@ const PARTS = [
   '10-core.js',
   '20-track.js',
   '30-cars.js',
+  '35-sound.js',
   '40-drive.js',
   '45-garage.js',
   '46-garage-ui.js',

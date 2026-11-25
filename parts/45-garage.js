@@ -23,35 +23,46 @@ var RHO = 1.225;              // air, kg/m^3
 /* mass kg, power kW, grip as a lateral g coefficient, brake in m/s^2,
    steer in rad/s, cda is drag area in m^2. */
 
+/* cyl is combustion events per two turns of the crank, which for a
+   four-stroke is the cylinder count, and for the RX-7 two-rotor Wankel
+   is four, because it fires twice every shaft revolution. With the
+   redline it is what the engine note is built from, so a flat six does
+   not sound like a V8 and the inline five warbles the way an inline
+   five does. */
 var CARS = {
   hatch: {
     name: 'Honda Civic Si', nick: 'The hatch',
     desc: 'Front-drive, light, and gutless in a straight line. It corners far better than it has any right to.',
     price: 0, mass: 1046, power: 92, grip: 0.98, brake: 9.2, steer: 2.5, cda: 0.72,
+    cyl: 4, redline: 7800, engine: 'K20 inline four',
     body: 'hatch', colour: 0x4a9eff
   },
   coupe: {
     name: 'Toyota GR86', nick: 'The coupe',
     desc: 'The sensible step up. Nothing it does is remarkable and nothing it does is wrong.',
     price: 24000, mass: 1270, power: 174, grip: 1.08, brake: 10.4, steer: 2.3, cda: 0.64,
+    cyl: 4, redline: 7400, engine: 'flat four',
     body: 'coupe', colour: 0xe8463c
   },
   muscle: {
     name: 'Plymouth Barracuda 426 Hemi', nick: 'The muscle',
     desc: 'Enormous power, enormous weight, brakes from an earlier decade. Terrifying and fast in that order.',
     price: 46000, mass: 1655, power: 317, grip: 1.02, brake: 9.6, steer: 1.95, cda: 0.81,
+    cyl: 8, redline: 6000, engine: '426 Hemi V8',
     body: 'muscle', colour: 0xf2a33c
   },
   rally: {
     name: 'Audi Sport Quattro', nick: 'The rally car',
     desc: 'All four wheels driven. Climbs out of corners in a way nothing else here manages.',
     price: 72000, mass: 1298, power: 225, grip: 1.26, brake: 11.4, steer: 2.55, cda: 0.76,
+    cyl: 5, redline: 6800, engine: 'inline five',
     body: 'rally', colour: 0xe8e8ea
   },
   proto: {
     name: 'Ultima GTR', nick: 'The prototype',
     desc: 'Barely a road car. Stiff, loud, and utterly unforgiving of a lazy line.',
     price: 155000, mass: 930, power: 395, grip: 1.42, brake: 13.2, steer: 2.75, cda: 0.58,
+    cyl: 8, redline: 6500, engine: 'small block V8',
     body: 'proto', colour: 0x2fd39a
   },
 
@@ -64,7 +75,11 @@ var CARS = {
      `boost` and `lag` on a car are its factory induction, before anything
      in the garage. A sequential twin-turbo is on song almost off idle; a
      single big one is not; a supercharger has no lag at all and so carries
-     none of this, just a lot of power.
+     none of this, just a lot of power - which is why the factory blown
+     cars say `blown` instead. Nothing in the physics reads it; it is there
+     so the Hellcats whine like Hellcats instead of sounding like a big
+     naturally aspirated V8, which is the one thing they do not sound
+     like.
      --------------------------------------------------------------------- */
 
   a80: {
@@ -72,6 +87,7 @@ var CARS = {
     desc: 'Sequential turbos, so it pulls from almost nothing and never stops. Heavy, and it hides it well.',
     price: 58000, mass: 1570, power: 239, grip: 1.14, brake: 10.6, steer: 2.25, cda: 0.70,
     boost: 0.16, lag: 10,
+    cyl: 6, redline: 7000, engine: '2JZ inline six',
     body: 'a80', colour: 0xe8562c
   },
   a90: {
@@ -79,24 +95,31 @@ var CARS = {
     desc: 'Shorter, stiffer and sharper than the car it is named after. One big turbo and a very short wheelbase.',
     price: 78000, mass: 1540, power: 285, grip: 1.18, brake: 11.0, steer: 2.40, cda: 0.63,
     boost: 0.14, lag: 8,
+    cyl: 6, redline: 6500, engine: 'B58 inline six',
     body: 'a90', colour: 0xd8d8dc
   },
   hellcoupe: {
     name: 'Dodge Challenger Hellcat', nick: 'The Hellcat',
     desc: 'Supercharged, so all of it arrives at once. Two tonnes of it. The tyres are a formality.',
     price: 118000, mass: 1975, power: 527, grip: 1.04, brake: 10.2, steer: 1.90, cda: 0.86,
+    blown: true,
+    cyl: 8, redline: 6200, engine: 'supercharged 6.2 V8',
     body: 'hellcoupe', colour: 0x6b2fd0
   },
   hellsedan: {
     name: 'Dodge Charger Hellcat', nick: 'The four-door',
     desc: 'The same engine with two more doors and a longer wheelbase. Calmer, heavier, every bit as silly.',
     price: 112000, mass: 2050, power: 527, grip: 1.02, brake: 10.0, steer: 1.85, cda: 0.90,
+    blown: true,
+    cyl: 8, redline: 6200, engine: 'supercharged 6.2 V8',
     body: 'hellsedan', colour: 0x1d1f24
   },
   hellwagon: {
     name: 'Dodge Durango Hellcat', nick: 'The fast SUV',
     desc: 'Three rows of seats and seven hundred horsepower. Physics has opinions about the corners.',
     price: 104000, mass: 2470, power: 529, grip: 0.95, brake: 9.8, steer: 1.75, cda: 1.08,
+    blown: true,
+    cyl: 8, redline: 6200, engine: 'supercharged 6.2 V8',
     body: 'suv', colour: 0x2a6e4a
   },
   rx: {
@@ -104,6 +127,7 @@ var CARS = {
     desc: 'A rotary, so it revs past where everything else has given up. Light, delicate, and allergic to neglect.',
     price: 64000, mass: 1280, power: 188, grip: 1.22, brake: 11.2, steer: 2.60, cda: 0.62,
     boost: 0.15, lag: 11, stability: 0.96,
+    cyl: 4, redline: 8000, engine: 'two-rotor Wankel',
     body: 'rx', colour: 0xf2e9d8
   },
   evo: {
@@ -111,6 +135,7 @@ var CARS = {
     desc: 'Four driven wheels and a turbo, in a shell with no interior worth mentioning. It simply goes where you point it.',
     price: 84000, mass: 1410, power: 206, grip: 1.34, brake: 11.8, steer: 2.65, cda: 0.74,
     boost: 0.18, lag: 9,
+    cyl: 4, redline: 7000, engine: '4G63 inline four',
     body: 'evo', colour: 0xe8e8ea
   },
   gtr: {
@@ -118,6 +143,7 @@ var CARS = {
     desc: 'Twin turbos, all-wheel drive and more computers than the rest of this showroom combined. Heavy, and it never once feels it.',
     price: 88000, mass: 1560, power: 206, grip: 1.32, brake: 11.6, steer: 2.45, cda: 0.68,
     boost: 0.17, lag: 10,
+    cyl: 6, redline: 8000, engine: 'RB26 inline six',
     body: 'gtr', colour: 0x5aa8e8
   },
   rear: {
@@ -125,12 +151,14 @@ var CARS = {
     desc: 'Engine behind the back axle and a turbo that arrives all at once at 36 mph. Quick, and it has opinions about lifting mid-corner.',
     price: 128000, mass: 1470, power: 265, grip: 1.30, brake: 11.9, steer: 2.50, cda: 0.60,
     boost: 0.22, lag: 16, stability: 0.88,
+    cyl: 6, redline: 6700, engine: 'flat six',
     body: 'rear', colour: 0xf2d04a
   },
   super: {
     name: 'Lamborghini Aventador SV', nick: 'The supercar',
     desc: 'Mid-engined, naturally aspirated and completely impractical. The fastest thing here that still has a numberplate.',
     price: 140000, mass: 1525, power: 552, grip: 1.38, brake: 12.6, steer: 2.60, cda: 0.64,
+    cyl: 12, redline: 8500, engine: 'V12',
     body: 'super', colour: 0x8ad83c
   },
   trx: {
@@ -138,6 +166,8 @@ var CARS = {
     desc: 'Supercharged pickup on knobbly tyres. Hopeless in a corner, hilarious everywhere else, and it does not care about grass.',
     price: 96000, mass: 2900, power: 523, grip: 0.88, brake: 9.2, steer: 1.60, cda: 1.95,
     offroad: 0.35,
+    blown: true,
+    cyl: 8, redline: 6200, engine: 'supercharged 6.2 V8',
     body: 'pickup', colour: 0xb8902c
   }
 };
@@ -1013,6 +1043,58 @@ function paintColour(carKey, looks){
   var pal = swatchesFor(carKey);
   return (pal[looks && looks.paint] || pal[0]).c;
 }
+
+/* ---------------------------------------------------------- the rev counter -- */
+
+/* There is no gearbox in the physics - the model works in force against
+   speed, and that is deliberate. But the dash shows a gear and a rev bar,
+   and now the car makes a noise, and those two had better be the same
+   number or the engine will scream while the needle sits still.
+
+   So both read this. Six ratios spread evenly across the car's own top
+   speed: the fraction of the way up the box tells you the gear, and the
+   fraction of the way through that gear is the fraction of the way to the
+   redline. Idle is where it sits when the fraction is nothing, because an
+   engine at rest is not at zero rpm, it is idling.
+
+   IDLE_RPM is one number rather than per car because the difference
+   between a 700 rpm V8 and an 850 rpm four is not something anyone will
+   hear over the exhaust. The redline is per car, and that one you hear. */
+var GEARS_SHOWN = 6, IDLE_RPM = 820;
+
+function revsOf(carKey, speed, vMax){
+  var frac = clamp(Math.abs(speed) / (vMax || 1), 0, 1);
+  var gear = Math.min(GEARS_SHOWN - 1, Math.floor(frac * GEARS_SHOWN));
+  /* Revs inside a gear run from a standstill, not from the bottom of that
+     gear's slice of the speed range. The difference sounds small and is
+     not: taking the slice directly - frac * 6 - gear - puts you at a tenth
+     of the redline in sixth at 85 mph of a 100 mph car, pulling away like
+     a tractor, when the honest answer is 85 per cent of the redline.
+
+     Top gear is geared so that the redline IS the top speed, so in gear g
+     of six the engine reaches its redline at (g+1)/6 of the car's top
+     speed, and at any speed below that it is the same fraction of the way
+     up. Which also gives the right-sized drop at every change: first to
+     second lands at half the redline, fifth to sixth at five sixths of it.
+     Big drops low down, small ones high up. That is what a gearbox is. */
+  var within = clamp(frac * GEARS_SHOWN / (gear + 1), 0, 1);
+  var red = (CARS[carKey] && CARS[carKey].redline) || 7000;
+  return {
+    gear: gear + 1,
+    within: within,
+    rpm: IDLE_RPM + within * (red - IDLE_RPM),
+    redline: red
+  };
+}
+
+/* How often the engine fires, in events per second. A four-stroke fires
+   every cylinder once per two turns of the crank, so the whole cycle comes
+   round at rpm/120 - which is the frequency the note is built on, because
+   working in cycles rather than revolutions is what lets a cross-plane V8
+   have its half-order lumpiness at all. */
+function cycleHz(rpm){ return rpm / 120; }
+
+function firingHz(rpm, cyl){ return cycleHz(rpm) * (cyl || 4); }
 
 /* ------------------------------------------------------------- the career -- */
 

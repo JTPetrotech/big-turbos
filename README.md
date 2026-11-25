@@ -226,6 +226,65 @@ and the highlight on a bonnet agree with each other, and there is cloud.
 All of it together is about 60 draw calls and 15,000 triangles for a car on
 a track, which is less than the game drew before the wheels were rewritten.
 
+## The noise
+
+Every sound in the game is made up on the spot out of oscillators and
+filtered noise. There is not one audio file, which is how the whole thing
+is still a single page with nothing to fetch — but synthesis is also the
+only way to get it right here, which is the better reason. A sample is one
+engine at one speed: it has to be pitched up and down and looped, the loop
+is audible, and it cannot know that this particular car is a flat six at
+6,700 rpm with a turbo on it. An engine built from its own firing frequency
+can.
+
+So every car carries a **cylinder count and a redline**, both real, and the
+note is built from them. A four-stroke fires each cylinder once per two
+turns of the crank, so the oscillator runs at the full cycle — rpm/120 —
+and harmonic *n* lands on the *n*/2-th order of the engine. That factor of
+two is the whole trick: it is what gives a cross-plane V8 somewhere to put
+the half-orders that make it burble, which an oscillator at crank speed
+simply cannot express. Harmonic *cyl* is the firing frequency, its
+multiples are the overtones, and how much sits in between is how lumpy the
+engine is. An inline six and a flat six are balanced, a V12 is two of those
+end to end, a big V8 is the opposite and is loved for it, and an inline five
+cannot balance at all — which is the entire reason an Audi five-pot
+warbles.
+
+Measured rather than hoped for: the Civic's peak sits on 260 Hz at its
+7,800 redline, which is exactly rpm/120 × 4, with the overtones at 520, 780
+and 1040.
+
+On top of that, each driven from a number the physics already had:
+
+| | where it comes from |
+|---|---|
+| Induction roar | filtered noise, opening with throttle and revs |
+| Turbo whistle | the boost `carStats` works out, silent below the threshold |
+| Blow-off | boost that was there a moment ago and a throttle that is not |
+| Supercharger | a whine geared to the crank, not to the boost — which is how you tell one from a turbo with your eyes shut |
+| Tyres | the slip the tyre model produced, and a different note on grass |
+| Wind | rises with the square of road speed |
+| Nitrous | a hiss while you hold it |
+
+A part you cannot hear is at least a part that is not lying to you: fit a
+big turbo and there is genuinely nothing below 58 mph, then a whistle, then
+a chirp every time you lift.
+
+**The gearbox got fixed on the way.** The rev counter spread six gears
+evenly across the car's top speed and read the revs off each gear's own
+slice, which put you at a tenth of the redline in sixth at 85 per cent of
+top speed — pulling away like a tractor. Top gear is geared so the redline
+*is* the top speed, so in gear *g* of six the engine redlines at (g+1)/6 of
+the car's top speed and sits at the same fraction below that. Which gives
+the right-sized drop at every change too: first to second lands at 56 per
+cent of the redline, fifth to sixth at 85. Big drops low down, small ones
+high up. The needle and the noise read the same `revsOf`, so they cannot
+disagree.
+
+Sound is on by default with a volume slider under **Sound** in the menu, it
+starts only once you have touched something because every browser insists,
+and it goes quiet when you leave a race or switch tabs.
+
 ## The modes
 
 **Career** and **quick race** are the laps. Two more are not:

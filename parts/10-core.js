@@ -190,6 +190,7 @@ function freshSave(){
     kits: [],                  // body kits built in the Workbench
     tune: {},                  // carKey -> Speed Demon dial positions
     dyno: {},                  // carKey -> the best pull it has put down
+    sound: { on: true, vol: 0.7 },  // engine note: on, and how loud
     freeBuild: true,           // unlimited money: parts and cars cost nothing
     seen: false
   };

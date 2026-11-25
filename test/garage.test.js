@@ -27,8 +27,14 @@ H.run(ctx, H.grab(gar, [
   'newKit', 'benchStep', 'allKits', 'kitAt', 'isCustomKit', 'saveKit', 'deleteKit',
   'gripCeiling', 'dialByKey', 'neutralTune', 'tuneFor', 'setTune', 'resetTune',
   'isTuned', 'applyTune', 'dynoPull', 'dynoPeak', 'logDyno',
-  'looksFor', 'swatchesFor', 'defaultPaint', 'paintColour'
+  'looksFor', 'swatchesFor', 'defaultPaint', 'paintColour',
+  'revsOf', 'cycleHz', 'firingHz'
 ]));
+/* Plain numbers, so grabVar cannot lift them: read out of the source the
+   same way MAX_KITS is, rather than typed in here where they would rot. */
+H.run(ctx, 'var GEARS_SHOWN = ' + Number(/var GEARS_SHOWN\s*=\s*(\d+)/.exec(gar)[1]) +
+           ', IDLE_RPM = ' + Number(/IDLE_RPM\s*=\s*(\d+)/.exec(gar)[1]) + ';');
+H.run(ctx, H.grab(H.read('35-sound.js'), ['engineVoice', 'voiceLevels', 'engineSmooth']));
 H.run(ctx, H.grabVar(gar, ['BENCH_PARTS', 'TUNE_DIALS']));
 /* grabVar lifts tables, not plain numbers, so this one is read out of the
    source rather than typed here as well. Change it in the game and the test
@@ -832,5 +838,155 @@ for(const key of ctx.CAR_ORDER){
 }
 H.ok(outOfRange.length === 0, 'so a saved colour still means that colour next time',
      outOfRange.join('; ') + ', past the end of a shop ' + PAINTS_AT_LOAD + ' long');
+
+/* ------------------------------------------------------------ the noise -- */
+
+console.log('\n  the noise it makes');
+
+/* Every car has to have an engine in it, and it has to be an engine that
+   could exist. A cylinder count and a redline are the only two numbers the
+   sound is built from, so a typo in either is a car that sounds wrong and
+   nothing else in the game would ever notice. */
+let noEngine = [];
+for(const key of ctx.CAR_ORDER){
+  const c = ctx.CARS[key];
+  if(!(c.cyl >= 3 && c.cyl <= 12)) noEngine.push(c.name + ' has ' + c.cyl + ' cylinders');
+  if(!(c.redline >= 5000 && c.redline <= 9500)) noEngine.push(c.name + ' redlines at ' + c.redline);
+  if(!c.engine) noEngine.push(c.name + ' does not say what engine it has');
+}
+H.ok(noEngine.length === 0, 'every car has an engine that could exist',
+     noEngine.join('; '));
+
+/* And the note it makes has to be a note you can hear. Firing frequency at
+   the redline: a V12 at 8,500 is the highest thing here and a Hemi at
+   6,000 the lowest, and both want to come out somewhere a laptop speaker
+   can reproduce. */
+let outOfBand = [];
+for(const key of ctx.CAR_ORDER){
+  const c = ctx.CARS[key];
+  const hz = ctx.firingHz(c.redline, c.cyl);
+  if(hz < 90 || hz > 1000) outOfBand.push(c.name + ' fires at ' + hz.toFixed(0) + ' Hz flat out');
+}
+H.ok(outOfBand.length === 0, 'and one that comes out in the audible middle',
+     outOfBand.join('; '));
+
+/* The dial and the noise are the same number, which is the whole reason
+   revsOf exists rather than the HUD keeping its own arithmetic. */
+const loop50 = H.read('50-loop.js');
+H.ok(/revsOf\(you\.key, you\.vf, you\.vMax\)/.test(loop50),
+     'the rev counter is read off the same revsOf the engine is built on');
+
+/* Idle is idle, the redline is the redline, and in between the revs saw up
+   and drop at every change - which is what having gears means. */
+const sample = ctx.carStats('coupe', {});
+const vMax = ctx.topSpeed(sample);
+H.ok(Math.abs(ctx.revsOf('coupe', 0, vMax).rpm - ctx.IDLE_RPM) < 1,
+     'a stopped car is idling, not stopped dead',
+     ctx.revsOf('coupe', 0, vMax).rpm.toFixed(0) + ' rpm');
+H.ok(Math.abs(ctx.revsOf('coupe', vMax, vMax).rpm - ctx.CARS.coupe.redline) < 1,
+     'and flat out it is on the limiter',
+     ctx.revsOf('coupe', vMax, vMax).rpm.toFixed(0) + ' rpm');
+
+let drops = 0, gears = new Set();
+let prev = ctx.revsOf('coupe', 0, vMax).rpm;
+for(let i = 1; i <= 600; i++){
+  const r = ctx.revsOf('coupe', vMax * i / 600, vMax);
+  gears.add(r.gear);
+  if(r.rpm < prev - 100) drops++;
+  prev = r.rpm;
+}
+H.ok(gears.size === 6, 'there are six gears to go up through', gears.size + ' of them');
+H.ok(drops === 5, 'and the revs drop five times getting there, once per change',
+     drops + ' drops');
+
+/* The size of those drops is the shape of a gearbox. First to second
+   halves the revs; fifth to sixth barely touches them. A model that gave
+   every gear an equal slice of the road speed dropped to a tenth of the
+   redline every time, which is a tractor. */
+const dropTo = [];
+for(let g = 1; g <= 5; g++){
+  const justAbove = ctx.revsOf('coupe', vMax * (g / 6 + 0.0005), vMax);
+  dropTo.push(justAbove.rpm / ctx.CARS.coupe.redline);
+}
+H.ok(dropTo[0] > 0.45 && dropTo[0] < 0.56,
+     'first to second drops the revs by about half',
+     'to ' + (dropTo[0] * 100).toFixed(0) + ' per cent of the redline');
+H.ok(dropTo[4] > 0.78 && dropTo[4] < 0.88,
+     'and fifth to sixth hardly drops them at all',
+     'to ' + (dropTo[4] * 100).toFixed(0) + ' per cent');
+let widening = true;
+for(let i = 1; i < dropTo.length; i++) if(dropTo[i] <= dropTo[i - 1]) widening = false;
+H.ok(widening, 'with every change up landing higher than the one before it',
+     dropTo.map(function(d){ return (d * 100).toFixed(0); }).join(' -> ') + ' per cent');
+
+/* And top gear has to pull. The old model had a car at 85 per cent of its
+   top speed sitting at a tenth of its redline. */
+H.ok(ctx.revsOf('coupe', vMax * 0.85, vMax).rpm > ctx.CARS.coupe.redline * 0.7,
+     'a car near its top speed is revving near its redline',
+     Math.round(ctx.revsOf('coupe', vMax * 0.85, vMax).rpm) + ' rpm at 85 per cent of top speed');
+
+/* What each car's induction should and should not be heard doing. A turbo
+   whistles and a blower whines, and the difference is audible in a real
+   car park, so it had better be audible here. */
+const voiceAt = (key, frac, over) => {
+  const st = ctx.carStats(key, (over && over.parts) || {});
+  const car = Object.assign({
+    key: key, stats: st, vMax: ctx.topSpeed(st),
+    vf: ctx.topSpeed(st) * frac, vl: 0, off: false, nosOn: false
+  }, over || {});
+  const input = (over && over.input) || { throttle: 1, brake: 0, steer: 0, hand: false };
+  return ctx.voiceLevels(ctx.engineVoice(car, input));
+};
+
+H.ok(voiceAt('muscle', 0.5).turbo === 0 && voiceAt('muscle', 0.5).blower === 0,
+     'a naturally aspirated car has nothing to whistle or whine about');
+H.ok(voiceAt('rear', 0.5).turbo > 0 && voiceAt('rear', 0.5).blower === 0,
+     'a turbo car whistles and does not whine');
+H.ok(voiceAt('hellcoupe', 0.5).blower > 0 && voiceAt('hellcoupe', 0.5).turbo === 0,
+     'a supercharged one whines and does not whistle');
+H.ok(voiceAt('hatch', 0.5, { parts: { turbo: 2 } }).blower > 0,
+     'and a supercharger bought in the garage whines like one');
+
+/* Lag is the whole point of a big turbo, and silence below the threshold
+   is what it sounds like. */
+const bigTurbo = { parts: { turbo: 3 } };
+H.ok(voiceAt('hatch', 0.08, bigTurbo).turbo === 0,
+     'a big turbo makes no noise before it is spinning',
+     'nothing at 8 per cent of top speed');
+H.ok(voiceAt('hatch', 0.7, bigTurbo).turbo > 0,
+     'and does once it is', voiceAt('hatch', 0.7, bigTurbo).turbo.toFixed(3) + ' of full');
+H.ok(voiceAt('hatch', 0.7, Object.assign({ input: { throttle: 0, brake: 0, steer: 0, hand: false } }, bigTurbo)).turbo === 0,
+     'and goes quiet the moment you lift');
+
+/* Coasting is not the same as pulling. */
+H.ok(voiceAt('coupe', 0.5, { input: { throttle: 0, brake: 0, steer: 0, hand: false } }).engine <
+     voiceAt('coupe', 0.5).engine,
+     'an engine off the throttle is quieter than one on it');
+
+/* Slip, grass and nitrous each have to actually do something. */
+H.ok(voiceAt('coupe', 0.5, { vl: 11 }).tyre > voiceAt('coupe', 0.5).tyre,
+     'sliding makes the tyres squeal');
+H.ok(voiceAt('coupe', 0.5, { off: true }).tyre > voiceAt('coupe', 0.5).tyre,
+     'and the grass makes its own noise');
+H.ok(voiceAt('coupe', 0.5, { nosOn: true }).nos > 0, 'nitrous hisses while it is held');
+H.ok(voiceAt('coupe', 0.9).wind > voiceAt('coupe', 0.3).wind,
+     'and the faster you go the more wind there is');
+
+/* Nothing may ever add up past one. Web Audio clips hard, and clipping is
+   the difference between a game with sound and a game you turn the sound
+   off on. Every car, every speed, every awful combination at once. */
+let worst = 0, worstWhere = '';
+for(const key of ctx.CAR_ORDER){
+  for(const parts of [{}, { turbo: 2 }, { turbo: 5 }, { nos: 2 }]){
+    for(let f = 0; f <= 1.0001; f += 0.05){
+      const L = voiceAt(key, f, { parts: parts, vl: 40, off: true, nosOn: true });
+      const sum = L.engine + L.engineUp + L.roar + L.turbo + L.blower +
+                  L.tyre + L.wind + L.nos;
+      if(sum > worst){ worst = sum; worstWhere = ctx.CARS[key].name; }
+    }
+  }
+}
+H.ok(worst < 0.92, 'and everything at once still cannot clip the output',
+     'worst case ' + worst.toFixed(3) + ' of full scale, on the ' + worstWhere);
 
 H.done();

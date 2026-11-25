@@ -19,6 +19,8 @@ var bannerTimer = 0;
 
 function init(){
   loadSave();
+  loadSoundPrefs();
+  watchVisibility();
   initScene();
   wire();
   enterShowcase();
@@ -312,6 +314,9 @@ function raceStep(dt){
     if(!G.started) input = { throttle: 0, brake: 0, steer: 0, hand: false };
     else if(car.ai) input = aiInput(car, G.track, G.cars);
     else input = gatherInput();
+    /* Kept for the engine note, which wants the same throttle the physics
+       was handed rather than a guess made from the speed afterwards. */
+    if(!car.ai) G.youInput = input;
 
     stepCar(car, G.track, input, dt);
     updateProgress(car, G.track, G.t);
@@ -347,6 +352,12 @@ function raceStep(dt){
     c.obj.rotation.y = c.yaw;
     animateCar(c.obj, c.vf, c.steer, dt, c.roll, c.pitch);
   }
+
+  /* Only your own car makes a noise. Four more engines mixed down by
+     distance is a real thing racing games do and a bad trade here: it is
+     eight more oscillators for a sound that mostly muddies your own, and
+     your own is the one telling you when to change gear. */
+  if(G.you) audioFrame(G.you, G.youInput, dt);
 
   /* Once you are home the race is over, but the field should still be moving
      behind the results card rather than frozen mid-corner. */
@@ -412,13 +423,13 @@ function drawHUD(){
 
   /* Six gears spread across the car's own top speed. There is no gearbox in
      the physics - this is a readout, and an honest one: it is derived from
-     the same speed and ceiling the model is using. */
-  var frac = clamp(Math.abs(you.vf) / you.vMax, 0, 1);
-  var gear = Math.min(5, Math.floor(frac * 5.999));
-  var within = frac * 6 - gear;
-  $('gear').textContent = gear + 1;
-  $('gear').className = within > 0.93 ? 'flash' : '';
-  $('rev').style.width = (within * 100).toFixed(0) + '%';
+     the same speed and ceiling the model is using, through the same
+     revsOf the engine note is built on, so the needle and the noise are
+     the same number. */
+  var revs = revsOf(you.key, you.vf, you.vMax);
+  $('gear').textContent = revs.gear;
+  $('gear').className = revs.within > 0.93 ? 'flash' : '';
+  $('rev').style.width = (revs.within * 100).toFixed(0) + '%';
 
   var split = $('vSplit');
 
@@ -715,6 +726,11 @@ function frame(ts){
   dt = Math.min(dt, DT_MAX);
   if(dt <= 0) return;
 
+  /* The engine is steered by raceStep and by nothing else, so every mode
+     that is not a race has to say so - otherwise the last gain the mixer
+     was handed just stays there and the engine drones behind the menu. */
+  if(G.mode !== 'race') audioHush();
+
   if(G.mode === 'race') raceStep(dt);
   else if(G.mode === 'menu') showcaseStep(dt);
   else if(G.mode === 'done' && G.cars.length){
@@ -734,7 +750,46 @@ function frame(ts){
 
 /* ---------------------------------------------------------------- wiring -- */
 
+/* ------------------------------------------------------------- the sound -- */
+
+function drawSound(){
+  var el = $('vSoundOn');
+  if(el){
+    el.textContent = soundOn() ? 'On' : 'Off';
+    el.className = 'cost ' + (soundOn() ? 'have' : 'cant');
+  }
+  var slider = $('volSlider');
+  if(slider) slider.value = Math.round(AUDIO.vol * 100);
+  var note = $('soundNote');
+  if(note){
+    note.textContent = AUDIO.failed
+      ? 'This browser will not give the game an audio context, so there is no sound. Everything else works.'
+      : 'The engine is built from the car own cylinder count and redline, so the '
+        + 'V12 and the inline four are not the same noise pitched differently.';
+  }
+}
+
 function wire(){
+  /* Audio has to be started by something the player did - every browser
+     insists, and every browser is right to. Any press anywhere does it,
+     and after the first one this costs nothing. */
+  var firstTouch = function(){
+    if(soundOn()) audioWake();
+  };
+  window.addEventListener('pointerdown', firstTouch);
+  window.addEventListener('keydown', firstTouch);
+
+  $('btnSound').onclick = function(){ hideAll(); show('ovSound'); drawSound(); };
+  $('btnSoundBack').onclick = backToMenu;
+  $('rowSoundOn').onclick = function(){ setSound(!soundOn()); drawSound(); };
+  var vol = $('volSlider');
+  if(vol){
+    vol.oninput = function(){
+      setVolume(vol.value / 100);
+      if(soundOn()) audioWake();
+    };
+  }
+
   $('btnCareer').onclick = openEvents;
   $('btnDrag').onclick = startDrag;
   $('btnRoam').onclick = startRoam;
