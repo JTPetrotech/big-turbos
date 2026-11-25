@@ -351,6 +351,16 @@ The back two wheels stop turning while the front two carry on, and the
 tyres scrub whether or not you are sliding sideways, because locked wheels
 do.
 
+The grip reduction eases back off as the slip grows, which matters more
+than it sounds. A locked wheel cannot steer - that is the whole cut - but
+it is still a block of rubber being dragged across tarmac, and once the car
+is properly sideways that is a lot of friction. Taking the cut off the
+scrubbing as well as the cornering left a car that spun at speed sliding at
+a third of a g for fifteen seconds, which is a car on ice. It holds once
+sideways speed has gone too, not just forward speed: checking only the
+forward figure pinned the speedo at zero while the car was plainly still
+moving.
+
 ## Controls
 
 | | |

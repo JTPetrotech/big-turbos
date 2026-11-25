@@ -86,7 +86,20 @@ function stepCar(car, track, input, dt){
      which is the opposite of what the lever is for. The point of a
      handbrake is that the back lets go while the front still bites. */
   var handOn = !!hand;
-  if(handOn) grip *= 0.34;
+  if(handOn){
+    /* A locked wheel cannot steer, which is what the 0.34 is for. But it
+       is still a block of rubber being dragged across tarmac, and once the
+       car is properly sideways that is a great deal of friction - kinetic
+       rather than static, but real, and it is what brings a spin to a stop.
+
+       Taking the reduction off the cornering AND the scrubbing is what the
+       first version did, and it meant a car that spun at speed kept sliding
+       at a third of a g for fifteen seconds, which is a car on ice. The
+       multiplier comes back as the slip grows: nothing to steer with at the
+       start of the pull, plenty to scrub with once it has gone round. */
+    var scrub = clamp(Math.abs(car.vl) / 14, 0, 1);
+    grip *= 0.34 + 0.46 * scrub;
+  }
   var gripForce = grip * s.mass * GRAV;
 
   /* ---- nitrous ---- */
@@ -130,8 +143,17 @@ function stepCar(car, track, input, dt){
   if(Math.abs(car.vf) < 0.05 && throttle === 0) car.vf = 0;
   /* A handbrake holds a stopped car stopped. Off the throttle only - hold
      both and you get a burnout, which is correct and is also the only way
-     to leave the line on the strip with the lever up. */
-  if(handOn && throttle === 0 && Math.abs(car.vf) < 0.8) car.vf = 0;
+     to leave the line on the strip with the lever up.
+
+     Sideways speed counts towards "stopped". Checking the forward figure
+     alone pins the speedo at zero while the car is still carrying a good
+     deal of sideways momentum out of the slide that put it there, which
+     looks exactly as odd as it sounds. The tyres bleed that off in a
+     second or so on their own; the hold just waits for them. */
+  if(handOn && throttle === 0 && Math.abs(car.vf) < 0.8 && Math.abs(car.vl) < 1.2){
+    car.vf = 0;
+    car.vl = 0;
+  }
   car.vf = clamp(car.vf, -12, car.vMax * 1.02);
 
   /* ---- yaw ---- */

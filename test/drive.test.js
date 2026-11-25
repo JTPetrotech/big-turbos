@@ -893,6 +893,21 @@ for(let t = 0; t < 4; t += DT) ctx.stepCar(held, open, { throttle: 0, brake: 0, 
 H.ok(Math.abs(held.along - parkedAt) < 0.05, 'and it does not creep',
      Math.abs(held.along - parkedAt).toFixed(3) + ' m in four seconds');
 
+/* Including sideways. The hold used to look only at forward speed, which
+   pinned the speedo at zero while the car carried on sliding out of the
+   spin that had just put it there - stopped, by the only measure anyone
+   was taking, and plainly still moving. */
+const spun = ctx.makeCar('coupe', {});
+ctx.stageDrag([spun], open);
+for(let t = 0; t < 3; t += DT) ctx.stepCar(spun, open, { throttle: 1, brake: 0, steer: 0, hand: false }, DT);
+for(let t = 0; t < 1.4; t += DT) ctx.stepCar(spun, open, { throttle: 0, brake: 0, steer: 1, hand: true }, DT);
+for(let t = 0; t < 8; t += DT) ctx.stepCar(spun, open, { throttle: 0, brake: 0, steer: 0, hand: true }, DT);
+const restX = spun.x, restZ = spun.z;
+for(let t = 0; t < 3; t += DT) ctx.stepCar(spun, open, { throttle: 0, brake: 0, steer: 0, hand: true }, DT);
+const slid = Math.sqrt((spun.x - restX) * (spun.x - restX) + (spun.z - restZ) * (spun.z - restZ));
+H.ok(slid < 0.05, 'a car held after a spin is not still sliding sideways',
+     slid.toFixed(3) + ' m in three seconds, at ' + spun.vl.toFixed(2) + ' m/s sideways');
+
 /* But the throttle still beats it, which is what a burnout is and is the
    only way off the line on the strip with the lever up. */
 for(let t = 0; t < 2; t += DT) ctx.stepCar(held, open, { throttle: 1, brake: 0, steer: 0, hand: true }, DT);
