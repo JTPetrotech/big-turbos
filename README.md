@@ -111,9 +111,17 @@ added grip would make the whole garage a liar.
 
 ## The cars
 
-Sixteen of them, all real cars, and the figures are the real ones: kilowatts, kilograms,
+Twenty of them, all real cars, and the figures are the real ones: kilowatts, kilograms,
 and a drag area that a two-and-a-half tonne truck really does have. Nothing
 is scaled to feel fair.
+
+Four of them are there to be recognised rather than to be earned: the
+**Mustang GT**, the **Ferrari F40**, the **McLaren F1** and the **Bugatti
+Chiron**. Everything else in the list is a car an enthusiast would name;
+those four get named by people who do not follow cars at all. They are held
+to the same rule as the rest — real mass, real power, real drag area, real
+dimensions — and the model says what it says about them. The Chiron is the
+only sixteen-cylinder engine in the game and it sounds like it.
 
 Every card in the showroom carries a picture of the car it is selling, and the
 picture is a photograph rather than an icon: the same `buildCar` the race uses,
@@ -143,13 +151,17 @@ pixels into a canvas on the card takes one.
 | Plymouth Barracuda 426 Hemi | 317 | 1,655 | 4.3s | 13.05s @ 104 mph |
 | Audi Sport Quattro | 225 | 1,298 | 4.4s | 13.27s @ 100 mph |
 | Mitsubishi Lancer Evo IX | 206 | 1,410 | 4.5s | 13.28s @ 100 mph |
+| Ford Mustang GT | 338 | 1,705 | 4.2s | 12.87s @ 106 mph |
 | Dodge Durango Hellcat | 529 | 2,470 | 4.1s | 12.75s @ 109 mph |
 | Toyota GR Supra | 285 | 1,540 | 3.8s | 12.50s @ 109 mph |
 | Porsche 911 Turbo 3.6 | 265 | 1,470 | 3.9s | 12.43s @ 110 mph |
 | Dodge Charger Hellcat | 527 | 2,050 | 3.6s | 12.07s @ 116 mph |
 | Dodge Challenger Hellcat | 527 | 1,975 | 3.5s | 11.92s @ 117 mph |
+| Ferrari F40 | 352 | 1,254 | 3.0s | 10.95s @ 129 mph |
 | Lamborghini Aventador SV | 552 | 1,525 | 2.6s | 10.63s @ 130 mph |
+| McLaren F1 | 461 | 1,138 | 2.6s | 10.47s @ 134 mph |
 | Ultima GTR | 395 | 930 | 2.4s | 10.27s @ 134 mph |
+| Bugatti Chiron | 1103 | 1,996 | 2.3s | 9.10s @ 164 mph |
 
 Nobody typed those quarter-mile times in. They are what the driving model
 produces when you point each car down the strip, and they land within a few
@@ -284,6 +296,39 @@ disagree.
 Sound is on by default with a volume slider under **Sound** in the menu, it
 starts only once you have touched something because every browser insists,
 and it goes quiet when you leave a race or switch tabs.
+
+## For people who do not know cars
+
+Most of this game was written for someone who already knows what a kilowatt
+is. That is a small audience and it was never the point, so the figures now
+come with something a person can picture. None of it is a second set of
+numbers — each is the same stat read out a different way, which is the only
+version worth having, because change the car and all of them move together.
+
+**Horsepower**, because that is the number people have. The kilowatts the
+model actually runs on stay next to it rather than being replaced. The
+Hellcat reads 707 hp, which is the number it is famous for, and it reads it
+because 527 kW is 707 hp and not because anybody typed 707 anywhere.
+
+**Brakes as a stopping distance.** The brake stat was printed as a bare
+"9.2", which is metres per second squared and means nothing to anybody. It
+is now the distance that figure actually produces from 60 mph: 128 feet in
+the Civic, 94 in the Bugatti. Fit better brakes and watch it shorten.
+
+**How hard the car is to drive, in a word** — *Easy to drive*,
+*Straightforward*, *Demands respect*, *A handful* — worked out from power
+against grip, plus how willing the back end is to come round once it lets
+go. Not a label typed per car: a typed one would be a second opinion about
+a car the stats have already described, and it would go stale the moment
+anybody fitted a part. The garage shows it next to the rating and it moves
+as you shop, which is the point — a rating going up tells you the car got
+faster, and this tells you that you are about to spin it at the first
+corner. Bolt the quad turbo onto a GR86 and it crosses from Straightforward
+into Demands respect before you have spent anything.
+
+It puts the Skyline next to the Civic as a car anyone can drive, which is
+exactly right for four driven wheels and a computer for each of them, and
+it puts the 2.9-tonne supercharged pickup in with the Hellcats.
 
 ## The modes
 

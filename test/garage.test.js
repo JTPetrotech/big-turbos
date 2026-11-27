@@ -28,8 +28,13 @@ H.run(ctx, H.grab(gar, [
   'gripCeiling', 'dialByKey', 'neutralTune', 'tuneFor', 'setTune', 'resetTune',
   'isTuned', 'applyTune', 'dynoPull', 'dynoPeak', 'logDyno',
   'looksFor', 'swatchesFor', 'defaultPaint', 'paintColour',
-  'revsOf', 'cycleHz', 'firingHz'
+  'revsOf', 'cycleHz', 'firingHz',
+  'hpOf', 'stopFrom60', 'hardness', 'handlingOf'
 ]));
+H.run(ctx, H.grabVar(gar, ['HANDLING']));
+H.run(ctx, 'var HP_PER_KW = ' + Number(/HP_PER_KW\s*=\s*([\d.]+)/.exec(gar)[1]) +
+           ', SIXTY_MS = ' + Number(/SIXTY_MS\s*=\s*([\d.]+)/.exec(gar)[1]) +
+           ', M_TO_FT = ' + Number(/M_TO_FT\s*=\s*([\d.]+)/.exec(gar)[1]) + ';');
 /* Plain numbers, so grabVar cannot lift them: read out of the source the
    same way MAX_KITS is, rather than typed in here where they would rot. */
 H.run(ctx, 'var GEARS_SHOWN = ' + Number(/var GEARS_SHOWN\s*=\s*(\d+)/.exec(gar)[1]) +
@@ -464,6 +469,12 @@ console.log('\n  the championships');
     add(c.power, 'its kW');
     add(c.power * 1.34102, 'its horsepower');
     add(c.mass, 'its weight');
+    /* A car that says V8 on it had better have eight cylinders. The number
+       in a layout name used to be the one digit a description could carry
+       without meaning anything - now that every car states its cylinder
+       count, it means something and is checked like the rest. */
+    add(c.cyl, 'its cylinder count');
+    add(c.redline, 'its redline');
     if(c.lag !== undefined) add(c.lag * MPH, 'the speed its turbo comes in at');
     if(c.boost !== undefined) add(c.boost * 100, 'its factory boost');
     return m;
@@ -850,7 +861,7 @@ console.log('\n  the noise it makes');
 let noEngine = [];
 for(const key of ctx.CAR_ORDER){
   const c = ctx.CARS[key];
-  if(!(c.cyl >= 3 && c.cyl <= 12)) noEngine.push(c.name + ' has ' + c.cyl + ' cylinders');
+  if(!(c.cyl >= 3 && c.cyl <= 16)) noEngine.push(c.name + ' has ' + c.cyl + ' cylinders');
   if(!(c.redline >= 5000 && c.redline <= 9500)) noEngine.push(c.name + ' redlines at ' + c.redline);
   if(!c.engine) noEngine.push(c.name + ' does not say what engine it has');
 }
@@ -988,5 +999,91 @@ for(const key of ctx.CAR_ORDER){
 }
 H.ok(worst < 0.92, 'and everything at once still cannot clip the output',
      'worst case ' + worst.toFixed(3) + ' of full scale, on the ' + worstWhere);
+
+/* -------------------------------------------------- saying it in English -- */
+
+console.log('\n  saying it in English');
+
+/* Horsepower is a conversion, not a second opinion. If these two ever stop
+   agreeing it is because someone typed a number twice. */
+let hpWrong = [];
+for(const key of ctx.CAR_ORDER){
+  const st = ctx.carStats(key, {});
+  if(Math.abs(ctx.hpOf(st) / st.power - 1.34102) > 1e-6) hpWrong.push(ctx.CARS[key].name);
+}
+H.ok(hpWrong.length === 0, 'horsepower is the kilowatts, converted and nothing else',
+     hpWrong.join(', '));
+H.ok(Math.round(ctx.hpOf(ctx.carStats('hellcoupe', {}))) === 707,
+     'so the Hellcat reads the 707 it is famous for',
+     Math.round(ctx.hpOf(ctx.carStats('hellcoupe', {}))) + ' hp');
+
+/* The stopping distance is v squared over 2a off the same brake figure the
+   physics decelerates with, in feet. A real car stops from 60 in somewhere
+   between about 90 and 160 feet, and every car here should land in that
+   window - if one does not, its brake stat is wrong, not its arithmetic. */
+let stopWrong = [];
+for(const key of ctx.CAR_ORDER){
+  const st = ctx.carStats(key, {});
+  const ft = ctx.stopFrom60(st);
+  const byHand = (26.8224 * 26.8224) / (2 * st.brake) * 3.28084;
+  if(Math.abs(ft - byHand) > 0.01) stopWrong.push(ctx.CARS[key].name + ' arithmetic');
+  if(ft < 85 || ft > 175) stopWrong.push(ctx.CARS[key].name + ' stops in ' + ft.toFixed(0) + ' ft');
+}
+H.ok(stopWrong.length === 0, 'and 60 to 0 is a distance a real car could stop in',
+     stopWrong.join('; '));
+H.ok(ctx.stopFrom60(ctx.carStats('chiron', {})) < ctx.stopFrom60(ctx.carStats('hatch', {})),
+     'with the Bugatti stopping shorter than the Civic, as it should',
+     Math.round(ctx.stopFrom60(ctx.carStats('chiron', {}))) + ' ft against ' +
+     Math.round(ctx.stopFrom60(ctx.carStats('hatch', {}))) + ' ft');
+
+/* Fitting better brakes has to shorten the distance. A readout that does
+   not move when the part moves is decoration. */
+const stockStop = ctx.stopFrom60(ctx.carStats('coupe', {}));
+const bigStop = ctx.stopFrom60(ctx.carStats('coupe', { brakes: 3 }));
+H.ok(bigStop < stockStop - 4, 'and buying brakes visibly shortens it',
+     Math.round(stockStop) + ' ft becomes ' + Math.round(bigStop));
+
+/* The handling word. The ordering is the claim: the starter hatchback must
+   not come out harder to drive than a Bugatti, and the 911 has to read
+   harder than its power alone would suggest, because that is the whole
+   reason the stability stat exists. */
+const word = k => ctx.handlingOf(ctx.carStats(k, {})).n;
+H.ok(word('hatch') === 'Easy to drive', 'the car you start in is the easy one',
+     'the Civic reads "' + word('hatch') + '"');
+H.ok(ctx.handlingOf(ctx.carStats('chiron', {})).n === 'A handful',
+     'and the thousand-kilowatt one is not',
+     'the Chiron reads "' + word('chiron') + '"');
+H.ok(ctx.hardness(ctx.carStats('rear', {})) > ctx.hardness(ctx.carStats('a90', {})),
+     'the rear-engined 911 reads harder than a faster car that is not',
+     'the 911 at ' + ctx.hardness(ctx.carStats('rear', {})).toFixed(2) +
+     ' against the GR Supra at ' + ctx.hardness(ctx.carStats('a90', {})).toFixed(2));
+H.ok(ctx.hardness(ctx.carStats('evo', {})) < ctx.hardness(ctx.carStats('muscle', {})),
+     'and four driven wheels read easier than a muscle car with drum-era brakes',
+     'the Evo at ' + ctx.hardness(ctx.carStats('evo', {})).toFixed(2) +
+     ' against the Barracuda at ' + ctx.hardness(ctx.carStats('muscle', {})).toFixed(2));
+
+/* Every band has to be reachable, or it is a band nobody will ever read. */
+const seen = {};
+for(const key of ctx.CAR_ORDER) seen[word(key)] = (seen[word(key)] || 0) + 1;
+H.ok(Object.keys(seen).length === ctx.HANDLING.length,
+     'all four words are used by at least one car',
+     Object.keys(seen).map(function(k){ return k + ' x' + seen[k]; }).join(', '));
+
+/* And power has to be the thing that makes a car harder. A turbo does not
+   raise s.power - it multiplies force further up the rev range - so reading
+   the power field alone made a quad-turbo car read exactly as docile as the
+   same car with nothing on it, which is both untrue and the one thing a new
+   driver most needs told. */
+let easier = [], unmoved = [];
+for(const key of ctx.CAR_ORDER){
+  const stock = ctx.hardness(ctx.carStats(key, {}));
+  const blown = ctx.hardness(ctx.carStats(key, { turbo: 5, engine: 3 }));
+  if(blown < stock - 1e-9) easier.push(ctx.CARS[key].name);
+  if(blown < stock * 1.2) unmoved.push(ctx.CARS[key].name);
+}
+H.ok(easier.length === 0, 'and no amount of power ever makes a car easier to drive',
+     easier.join(', '));
+H.ok(unmoved.length === 0, 'while the biggest turbo in the shop plainly makes it harder',
+     unmoved.length ? unmoved.join(', ') + ' barely moved' : 'every car by at least a fifth');
 
 H.done();

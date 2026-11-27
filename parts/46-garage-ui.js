@@ -48,13 +48,24 @@ function wireMoneyMode(redraw){
 /* The ranges each bar is drawn against. Not the min and max of what exists -
    a bit of headroom at each end so a stock car does not read as empty and a
    fully built one does not peg everything. */
+/* Power leads with horsepower because that is the number people have, with
+   the kilowatts the model actually runs on kept alongside it rather than
+   replaced. Brakes were a bare "9.2", which is metres per second squared
+   and means nothing to anybody; they now read as the stopping distance
+   that figure produces from 60. */
 var BARS = [
-  { key: 'power', name: 'Power', lo: 60, hi: 440, fmt: function(s){ return Math.round(s.power) + ' kW'; } },
-  { key: 'mass', name: 'Weight', lo: 1750, hi: 600, fmt: function(s){ return Math.round(s.mass) + ' kg'; } },
-  { key: 'grip', name: 'Grip', lo: 0.85, hi: 2.0, fmt: function(s){ return gripAt(s, 30).toFixed(2) + 'g'; } },
-  { key: 'brake', name: 'Brakes', lo: 8, hi: 17, fmt: function(s){ return s.brake.toFixed(1); } },
-  { key: 'top', name: 'Top speed', lo: 85, hi: 215, fmt: function(s){ return Math.round(flatOut(s) * MPS_TO_MPH) + ' mph'; } },
-  { key: 'sixty', name: '0-60', lo: 11, hi: 2, fmt: function(s){ var z = zeroTo60(s); return z > 50 ? '--' : z.toFixed(1) + 's'; } }
+  { key: 'power', name: 'Power', lo: 60, hi: 1150,
+    fmt: function(s){ return Math.round(hpOf(s)) + ' hp<small> ' + Math.round(s.power) + ' kW</small>'; } },
+  { key: 'mass', name: 'Weight', lo: 2900, hi: 600,
+    fmt: function(s){ return Math.round(s.mass) + ' kg'; } },
+  { key: 'grip', name: 'Grip', lo: 0.85, hi: 2.0,
+    fmt: function(s){ return gripAt(s, 30).toFixed(2) + 'g'; } },
+  { key: 'brake', name: '60 to 0', lo: 8, hi: 17,
+    fmt: function(s){ return Math.round(stopFrom60(s)) + ' ft'; } },
+  { key: 'top', name: 'Top speed', lo: 85, hi: 260,
+    fmt: function(s){ return Math.round(flatOut(s) * MPS_TO_MPH) + ' mph'; } },
+  { key: 'sixty', name: '0-60', lo: 11, hi: 2,
+    fmt: function(s){ var z = zeroTo60(s); return z > 50 ? '--' : z.toFixed(1) + 's'; } }
 ];
 
 function barValue(key, s){
@@ -121,6 +132,18 @@ function renderStats(host, carKey, parts, previewParts){
           '<p class="note2">Class <b>' + cls + '</b>' +
           (next && classOf(rNow) !== cls ? ' — this part moves you out of class ' + classOf(rNow) : '') +
           '</p>';
+
+  /* What all of that adds up to, in words. The point of this line is the
+     moment it changes: fit the quad turbo and watch the car go from
+     Straightforward to A handful before you have spent anything. A rating
+     going up tells you the car got faster; it does not tell you that you
+     are about to spin it at the first corner. */
+  var handNow = handlingOf(now);
+  var handNext = handlingOf(next || now);
+  var moved = next && handNext.n !== handNow.n;
+  html += '<p class="note2 handline"><span class="chip ' + handClass(next || now) + '">' +
+          handNext.n + '</span> ' + handNext.why +
+          (moved ? ' <b>Was: ' + handNow.n + '.</b>' : '') + '</p>';
 
   host.innerHTML = html;
 }
@@ -326,6 +349,12 @@ function fillShots(el){
   requestAnimationFrame(next);
 }
 
+/* Green for a car anyone can drive, red for one that will catch you out. */
+function handClass(s){
+  var i = HANDLING.indexOf(handlingOf(s));
+  return ['ok', 'ok', 'warn', 'bad'][i] || '';
+}
+
 /* The three numbers that tell you how big the thing is, off the same BODIES
    table the picture was taken from. */
 function bodyLine(carKey){
@@ -355,14 +384,14 @@ function drawShowroom(){
             (!owned && !afford ? ' locked' : '') + '" data-car="' + key + '">' +
             shotOf(key) +
             '<div class="grow"><div class="t">' + car.name + '</div>' +
-            '<div class="d">' + car.desc + '</div>' +
+            '<div class="d">' + car.desc + ' <b>' + handlingOf(s).why + '</b></div>' +
             '<div class="chips">' +
             '<span class="chip cls">Class ' + classOf(r) + '</span>' +
             '<span class="chip">' + Math.round(flatOut(s) * MPS_TO_MPH) + ' mph</span>' +
             '<span class="chip">0-60 ' + zeroTo60(s).toFixed(1) + 's</span>' +
-            '<span class="chip">' + Math.round(s.power) + ' kW</span>' +
+            '<span class="chip">' + Math.round(hpOf(s)) + ' hp</span>' +
             '<span class="chip">' + Math.round(s.mass) + ' kg</span>' +
-            '<span class="chip">' + bodyLine(key) + '</span>' +
+            '<span class="chip ' + handClass(s) + '">' + handlingOf(s).n + '</span>' +
             '</div></div>' + right + '</div>';
   }
   $('showList').innerHTML = html;

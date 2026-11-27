@@ -169,7 +169,48 @@ var CARS = {
     blown: true,
     cyl: 8, redline: 6200, engine: 'supercharged 6.2 V8',
     body: 'pickup', colour: 0xb8902c
+  },
+
+  /* ---------------------------------------------------------------------
+     The ones people have heard of. Everything above this point is a car an
+     enthusiast would name; these four are the ones that get named by people
+     who do not follow cars at all - the poster on the wall, the one in the
+     film, the one everybody knows is the fastest. Same rules as the rest:
+     real mass, real power, real drag area, and the model says what it says.
+     --------------------------------------------------------------------- */
+
+  mustang: {
+    name: 'Ford Mustang GT', nick: 'The Mustang',
+    desc: 'The big friendly one. A five litre V8 in a car you could use every day, and it sounds like nothing else at this money.',
+    price: 45000, mass: 1705, power: 338, grip: 1.06, brake: 10.4, steer: 2.05, cda: 0.80,
+    cyl: 8, redline: 7500, engine: '5.0 Coyote V8',
+    body: 'mustang', colour: 0x1d4ed8
+  },
+  f40: {
+    name: 'Ferrari F40', nick: 'The poster car',
+    desc: 'No carpets, no power steering, and two turbos that arrive together and late. Built to be the fastest thing on the road and nothing else.',
+    price: 168000, mass: 1254, power: 352, grip: 1.26, brake: 11.6, steer: 2.60, cda: 0.60,
+    boost: 0.30, lag: 22, stability: 0.90,
+    cyl: 8, redline: 7750, engine: '2.9 twin-turbo V8',
+    body: 'f40', colour: 0xd91f16
+  },
+  mclaren: {
+    name: 'McLaren F1', nick: 'The three-seater',
+    desc: 'The driver sits in the middle, the engine bay is lined with gold, and for a decade nothing on the road came close. No turbos and no traction control.',
+    price: 205000, mass: 1138, power: 461, grip: 1.30, brake: 12.2, steer: 2.55, cda: 0.57,
+    stability: 0.92,
+    cyl: 12, redline: 7500, engine: 'BMW 6.1 V12',
+    body: 'mclaren', colour: 0xe8820f
+  },
+  chiron: {
+    name: 'Bugatti Chiron', nick: 'The Bugatti',
+    desc: 'Sixteen cylinders, four turbos and two tonnes of car, and it still gets to sixty quicker than anything else here. The one everybody names.',
+    price: 340000, mass: 1996, power: 1103, grip: 1.42, brake: 12.6, steer: 2.05, cda: 0.79,
+    boost: 0.30, lag: 9,
+    cyl: 16, redline: 6700, engine: '8.0 W16, four turbos',
+    body: 'chiron', colour: 0x1b3fa8
   }
+
 };
 
 /* Which bodies are trucks. A lift kit is only offered to these, and they are
@@ -184,8 +225,8 @@ function isTruck(carKey){
    the tests enforce - a showroom that is not in order is a showroom that
    lies about which car is the step up. */
 var CAR_ORDER = ['hatch', 'coupe', 'trx', 'a80', 'gtr', 'rx', 'muscle', 'rally',
-                 'evo', 'hellwagon', 'a90', 'rear', 'hellsedan', 'hellcoupe',
-                 'super', 'proto'];
+                 'evo', 'mustang', 'hellwagon', 'a90', 'rear', 'hellsedan', 'hellcoupe',
+                 'f40', 'super', 'mclaren', 'proto', 'chiron'];
 
 /* ----------------------------------------------------------------- parts -- */
 /* Every tier lists what it does to the car in plain terms, because a player
@@ -1042,6 +1083,71 @@ function defaultPaint(carKey){
 function paintColour(carKey, looks){
   var pal = swatchesFor(carKey);
   return (pal[looks && looks.paint] || pal[0]).c;
+}
+
+/* --------------------------------------------------- saying it in English -- */
+
+/* The garage is full of numbers that mean something to someone who already
+   knows cars and nothing at all to anyone else. 527 kW, 0.98 g, brakes 9.2.
+   The figures stay - they are what the model runs on and they are honest -
+   but every one of them now comes with something a person can picture.
+
+   None of this is a second set of numbers. Each is the same stat read out
+   a different way, which is the only version worth having: change the car
+   and all of them move together, because there is only one of them. */
+
+var HP_PER_KW = 1.34102;
+function hpOf(s){ return s.power * HP_PER_KW; }
+
+/* Sixty to nothing, in feet. Nobody has a feel for 9.2 metres per second
+   squared and everybody has a feel for the length of a car park. The
+   brake figure IS that deceleration, so this is just v squared over 2a
+   with no fudge in it. */
+var SIXTY_MS = 26.8224;
+var M_TO_FT = 3.28084;
+function stopFrom60(s){
+  return (SIXTY_MS * SIXTY_MS) / (2 * s.brake) * M_TO_FT;
+}
+
+/* How much the car will forgive, in a word.
+
+   What makes a car hard to drive HERE is not how fast it is - it is how
+   much power there is against how much grip there is to put it down, plus
+   how willing the back is to come round once it lets go. That second part
+   is the stability stat, and it is why the 911 reads harder than cars with more
+   power: a rear-engined turbo car with the mass behind the back axle will
+   bite you, and the model knows it.
+
+   Deliberately not a hand-written label per car. A hand-written one would
+   be a second opinion about a car the stats have already described, and
+   the moment someone retunes a car it would be a stale second opinion. */
+function hardness(s){
+  /* Boost counts, and the first version of this forgot it. A turbo does not
+     raise s.power - it multiplies the force further up the rev range - so a
+     car with the quad turbo bolted on read as exactly as easy to drive as
+     the same car with nothing, which is the opposite of true and is the
+     single thing a new driver most needs telling. Weighted the way rating
+     weights it, because it is the same argument: boost is power you only
+     have some of the time. */
+  var kwPerTonne = (s.power * 1000 / s.mass) * (1 + 0.7 * (s.boost || 0));
+  return kwPerTonne / (gripAt(s, 30) * 200) + (1 - (s.stability || 1)) * 2.6;
+}
+
+var HANDLING = [
+  { under: 0.60, n: 'Easy to drive',
+    why: 'Does what you ask and forgives getting it wrong.' },
+  { under: 0.88, n: 'Straightforward',
+    why: 'Honest. It will slide, but it tells you first.' },
+  { under: 1.30, n: 'Demands respect',
+    why: 'More power than grip. Be careful with the throttle.' },
+  { under: Infinity, n: 'A handful',
+    why: 'Will get away from you if you are greedy on the way out.' }
+];
+
+function handlingOf(s){
+  var h = hardness(s);
+  for(var i = 0; i < HANDLING.length; i++) if(h < HANDLING[i].under) return HANDLING[i];
+  return HANDLING[HANDLING.length - 1];
 }
 
 /* ---------------------------------------------------------- the rev counter -- */

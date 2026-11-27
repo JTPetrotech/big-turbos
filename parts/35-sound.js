@@ -99,7 +99,9 @@ function engineWave(ctx, cyl, smooth){
    every sense - an odd number of cylinders cannot balance, which is the
    whole reason an Audi five-pot warbles. */
 function engineSmooth(cyl){
-  if(cyl === 12) return 0.92;
+  /* Twelve or sixteen: a W16 is four banks of four and is as smooth as
+     anything with a crank in it. */
+  if(cyl >= 12) return 0.92;
   if(cyl === 6) return 0.80;
   if(cyl === 5) return 0.34;
   if(cyl === 8) return 0.22;

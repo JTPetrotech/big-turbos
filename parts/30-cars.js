@@ -68,7 +68,21 @@ var BODIES = {
             cabF: -0.10, cabL: 2.45, nose: 0.52, tail: 0.34, wheel: 0.42, arch: 0.12 },
   pickup: { len: 5.89, wide: 2.23, ride: 0.62, hood: 0.58, roof: 1.41,
             cabF: 0.70, cabL: 1.70, nose: 0.58, tail: 0.22, wheel: 0.47, arch: 0.15,
-            bed: 2.00 }
+            bed: 2.00 },
+
+  /* The famous four, at the sizes they really are. The Chiron is only a
+     quarter of a metre longer than the McLaren and a full twenty-two
+     centimetres wider, which is most of why one looks like a missile and
+     the other like a bar of soap. */
+  mustang: { len: 4.79, wide: 1.92, ride: 0.26, hood: 0.60, roof: 1.12,
+            cabF: -0.45, cabL: 1.70, nose: 0.72, tail: 0.52, wheel: 0.35, arch: 0.09 },
+  f40:    { len: 4.36, wide: 1.97, ride: 0.14, hood: 0.49, roof: 0.98,
+            cabF: 0.02, cabL: 1.28, nose: 0.84, tail: 0.62, wheel: 0.34, arch: 0.10 },
+  mclaren: { len: 4.29, wide: 1.82, ride: 0.15, hood: 0.48, roof: 0.99,
+            cabF: 0.05, cabL: 1.35, nose: 0.82, tail: 0.60, wheel: 0.33, arch: 0.09 },
+  chiron: { len: 4.54, wide: 2.04, ride: 0.14, hood: 0.52, roof: 1.07,
+            cabF: 0.10, cabL: 1.30, nose: 0.80, tail: 0.56, wheel: 0.35, arch: 0.11 }
+
 };
 
 /* Materials get reused across every car on the grid - five cars each making
